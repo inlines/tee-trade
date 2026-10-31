@@ -1,0 +1,6 @@
+apiVersion: 1
+providers:
+  - name: Tee Trade
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

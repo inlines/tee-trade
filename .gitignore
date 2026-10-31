@@ -1,0 +1,7 @@
+.env
+node_modules/
+dist/
+.angular/
+target/
+.DS_Store
+compose.override.yaml
