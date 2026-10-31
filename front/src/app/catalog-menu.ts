@@ -1,0 +1,50 @@
+import { Component, ElementRef, HostListener, ViewChild, inject } from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs';
+import { categories } from './catalog';
+
+@Component({
+  selector: 'app-catalog-menu',
+  imports: [RouterLink, RouterLinkActive],
+  template: `<details #dropdown class="catalog-dropdown" routerLinkActive="active" (focusout)="onFocusOut($event)">
+    <summary>Каталог <svg class="dropdown-chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" /></svg></summary>
+    <div class="catalog-dropdown-panel">
+      <a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page" (click)="close()">Все вещи</a>
+      @for (category of categories; track category.slug) {
+        <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page" (click)="close()">{{ category.name }}</a>
+      }
+    </div>
+  </details>`,
+})
+export class CatalogMenu {
+  readonly categories = categories;
+  @ViewChild('dropdown') private dropdown?: ElementRef<HTMLDetailsElement>;
+  private readonly element = inject(ElementRef<HTMLElement>);
+
+  constructor() {
+    inject(Router).events.pipe(filter(event => event instanceof NavigationEnd), takeUntilDestroyed())
+      .subscribe(() => this.close());
+  }
+
+  close() { if (this.dropdown) this.dropdown.nativeElement.open = false; }
+
+  @HostListener('document:click', ['$event'])
+  onOutsideClick(event: MouseEvent) {
+    if (!this.element.nativeElement.contains(event.target as Node)) this.close();
+  }
+
+  @HostListener('keydown.escape', ['$event'])
+  onEscape(event: Event) {
+    if (this.dropdown?.nativeElement.open) {
+      this.close();
+      this.dropdown.nativeElement.querySelector('summary')?.focus();
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
+
+  onFocusOut(event: FocusEvent) {
+    if (!this.element.nativeElement.contains(event.relatedTarget as Node | null)) this.close();
+  }
+}

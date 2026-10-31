@@ -1,6 +1,9 @@
+mod admin;
+mod chat;
+mod customers;
 use axum::{
     Json, Router,
-    extract::{Request, State},
+    extract::{Path, Query, Request, State},
     http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -17,38 +20,89 @@ struct AppState {
     cache: redis::Client,
     registry: Registry,
     requests: IntCounterVec,
+    admin_origin: String,
+    secure_cookie: bool,
+    chat_events: tokio::sync::broadcast::Sender<chat::Event>,
+}
+#[derive(Serialize, Deserialize)]
+struct ProductImage {
+    url: String,
+    alt: String,
+    kind: String,
 }
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
 struct Product {
     id: i32,
     name: String,
-    price_cents: i32,
+    price_cents: Option<i32>,
+    category: String,
+    brand: String,
+    release_year: Option<i32>,
+    description: String,
+    theme: String,
+    images: sqlx::types::Json<Vec<ProductImage>>,
+    is_demo: bool,
+}
+const PRODUCT_COLUMNS: &str =
+    "id, name, price_cents, category, brand, release_year, description, theme, images, is_demo";
+const CATEGORIES: [&str; 4] = ["sneakers", "t-shirts", "accessories", "headwear"];
+#[derive(Deserialize)]
+struct CatalogQuery {
+    category: Option<String>,
 }
 type ApiError = (StatusCode, &'static str);
 fn internal(error: impl std::fmt::Display) -> ApiError {
     tracing::error!(%error, "request failed");
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
 }
-async fn products(State(state): State<AppState>) -> Result<Json<Vec<Product>>, ApiError> {
+async fn products(
+    State(state): State<AppState>,
+    Query(query): Query<CatalogQuery>,
+) -> Result<Json<Vec<Product>>, ApiError> {
+    if let Some(category) = &query.category {
+        if !CATEGORIES.contains(&category.as_str()) {
+            return Err((StatusCode::BAD_REQUEST, "Unknown category"));
+        }
+    }
+    let revision: i64 = sqlx::query_scalar("SELECT version FROM catalog_revision")
+        .fetch_one(&state.db)
+        .await
+        .map_err(internal)?;
+    let key = format!(
+        "products:v3:{revision}:{}",
+        query.category.as_deref().unwrap_or("all")
+    );
     let mut cache = state.cache.get_multiplexed_async_connection().await.ok();
     if let Some(connection) = cache.as_mut() {
-        if let Ok(Some(value)) = connection.get::<_, Option<String>>("products:v1").await {
+        if let Ok(Some(value)) = connection.get::<_, Option<String>>(&key).await {
             if let Ok(products) = serde_json::from_str(&value) {
                 return Ok(Json(products));
             }
         }
     }
-    let products =
-        sqlx::query_as::<_, Product>("SELECT id, name, price_cents FROM products ORDER BY id")
-            .fetch_all(&state.db)
-            .await
-            .map_err(internal)?;
+    let products = sqlx::query_as::<_, Product>(&format!(
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) ORDER BY id"
+    )).bind(query.category).fetch_all(&state.db).await.map_err(internal)?;
     if let Some(connection) = cache.as_mut() {
         if let Ok(value) = serde_json::to_string(&products) {
-            let _: redis::RedisResult<()> = connection.set_ex("products:v1", value, 60).await;
+            let _: redis::RedisResult<()> = connection.set_ex(&key, value, 60).await;
         }
     }
     Ok(Json(products))
+}
+async fn product(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<Json<Product>, ApiError> {
+    sqlx::query_as::<_, Product>(&format!(
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE id = $1"
+    ))
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?
+    .map(Json)
+    .ok_or((StatusCode::NOT_FOUND, "Product not found"))
 }
 async fn ready(State(state): State<AppState>) -> Result<&'static str, ApiError> {
     sqlx::query("SELECT 1")
@@ -93,6 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     let db = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
     sqlx::migrate!().run(&db).await?;
+    admin::bootstrap(&db).await?;
     let registry = Registry::new();
     let requests = IntCounterVec::new(
         prometheus::Opts::new("http_requests_total", "HTTP responses"),
@@ -100,13 +155,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     registry.register(Box::new(requests.clone()))?;
     let state = AppState {
+        chat_events: tokio::sync::broadcast::channel(1024).0,
         db,
         cache: redis::Client::open(std::env::var("REDIS_URL")?)?,
         registry,
         requests,
+        admin_origin: std::env::var("APP_ORIGIN")
+            .unwrap_or_else(|_| "http://localhost:4200".into()),
+        secure_cookie: std::env::var("COOKIE_SECURE").is_ok_and(|value| value == "true"),
     };
     let app = Router::new()
+        .merge(admin::routes(state.clone()))
+        .merge(customers::routes())
+        .merge(chat::routes())
+        .route("/api/storefront", get(admin::storefront))
+        .route("/api/media/{id}", get(admin::media))
         .route("/api/products", get(products))
+        .route("/api/products/{id}", get(product))
         .route("/health", get(|| async { "ok" }))
         .route("/ready", get(ready))
         .route("/metrics", get(metrics))

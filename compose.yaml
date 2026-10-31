@@ -12,6 +12,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-tee_trade}:${POSTGRES_PASSWORD:?Copy .env.example to .env}@postgres:5432/${POSTGRES_DB:-tee_trade}
       REDIS_URL: redis://redis:6379
       RUST_LOG: info
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-arzamas}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:4200}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
       postgres:

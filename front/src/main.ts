@@ -1,29 +1,40 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
-import { HttpClient, provideHttpClient } from '@angular/common/http';
-import { CurrencyPipe } from '@angular/common';
-interface Product { id: number; name: string; price_cents: number; }
+import { provideHttpClient } from '@angular/common/http';
+import { registerLocaleData } from '@angular/common';
+import localeRu from '@angular/common/locales/ru';
+import { RouterLink, RouterLinkActive, RouterOutlet, Routes, provideRouter, withInMemoryScrolling } from '@angular/router';
+import { ChatDialog } from './app/chat-dialog';
+import { ChatService } from './app/chat.service';
+import { CustomerService } from './app/customer.service';
+import { AdminService } from './app/admin.service';
+import { CatalogMenu } from './app/catalog-menu';
+import { HomePage, CatalogPage, ProductPage, AboutPage, NotFoundPage } from './app/pages';
+registerLocaleData(localeRu);
+const routes: Routes = [
+  { path: '', component: HomePage, title: 'Tee Trade — вещи с характером' },
+  { path: 'catalog', component: CatalogPage, title: 'Каталог — Tee Trade' },
+  { path: 'catalog/:category', component: CatalogPage, title: 'Каталог — Tee Trade' },
+  { path: 'product/:id', component: ProductPage, title: 'Товар — Tee Trade' },
+  { path: 'about', component: AboutPage, title: 'О нас — Tee Trade' },
+  { path: 'account', loadComponent: () => import('./app/account-page').then(module => module.AccountPage), title: 'Аккаунт — Tee Trade' },
+  { path: 'admin', loadComponent: () => import('./app/admin-page').then(module => module.AdminPage), title: 'Управление — Tee Trade' },
+  { path: '**', component: NotFoundPage, title: 'Страница не найдена — Tee Trade' },
+];
 @Component({
-  selector: 'app-root',
-  imports: [CurrencyPipe],
-  template: `<header>TEE TRADE <span>Футболки на каждый день</span></header>
-    <main><h1>Твоя новая любимая футболка.</h1><p>Базовые вещи. Свободный стиль.</p>
-    @if (error()) { <p role="alert">Не удалось загрузить каталог. Попробуйте позже.</p> }
-    @else if (loading()) { <p role="status">Загружаем каталог…</p> }
-    @else { <section aria-label="Каталог футболок">@for (product of products(); track product.id) {
-      <article><div class="shirt" aria-hidden="true">T</div><h2>{{ product.name }}</h2>
-      <p>{{ product.price_cents / 100 | currency:'RUB':'symbol':'1.0-0' }}</p></article>
-    } @empty { <p>Каталог скоро появится.</p> }</section> }</main>`
+  selector: 'app-root', imports: [RouterOutlet, RouterLink, RouterLinkActive, CatalogMenu, ChatDialog],
+  template: `<a class="skip-link" href="#main">Перейти к содержимому</a>
+    <header class="site-header"><div class="header-main"><a class="wordmark" routerLink="/" aria-label="Tee Trade — главная">TEE TRADE<span>®</span></a>
+      <nav aria-label="Основное меню"><a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Главная</a><app-catalog-menu /><a routerLink="/about" routerLinkActive="active" ariaCurrentWhenActive="page">О нас</a>@if (admin.session()) { <a routerLink="/admin" routerLinkActive="active" ariaCurrentWhenActive="page">Админка</a> } @else { <a routerLink="/account" routerLinkActive="active" ariaCurrentWhenActive="page">{{ customer.session() ? customer.session()!.username : 'Войти / Регистрация' }}</a> }</nav>
+    </div></header>
+    <main id="main" tabindex="-1"><router-outlet /></main>
+    <footer><a class="wordmark" routerLink="/">TEE TRADE<span>®</span></a><nav aria-label="Меню в подвале"><a routerLink="/catalog">Каталог</a><a routerLink="/about">О нас</a></nav><span>© 2026 Tee Trade</span></footer>
+    @if (chat.selected(); as selected) { <app-chat-dialog [chat]="selected.chat" [admin]="selected.admin" /> }`,
 })
 class App {
-  readonly products = signal<Product[]>([]);
-  readonly loading = signal(true);
-  readonly error = signal(false);
-  constructor() {
-    inject(HttpClient).get<Product[]>('/api/products').subscribe({
-      next: products => { this.products.set(products); this.loading.set(false); },
-      error: () => { this.error.set(true); this.loading.set(false); }
-    });
-  }
+  readonly chat = inject(ChatService);
+  readonly admin = inject(AdminService);
+  readonly customer = inject(CustomerService);
+  constructor() { void this.admin.restore().catch(() => {}); void this.customer.restore().catch(() => {}); }
 }
-bootstrapApplication(App, { providers: [provideHttpClient()] }).catch(console.error);
+bootstrapApplication(App, { providers: [provideHttpClient(), provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }))] }).catch(console.error);

@@ -1,1 +1,49 @@
-{"$schema":"./node_modules/@angular/cli/lib/config/schema.json","version":1,"projects":{"tee-trade":{"projectType":"application","root":"","sourceRoot":"src","architect":{"build":{"builder":"@angular/build:application","options":{"browser":"src/main.ts","tsConfig":"tsconfig.json","index":"src/index.html","styles":["src/styles.css"]},"configurations":{"production":{"outputHashing":"all","budgets":[{"type":"initial","maximumWarning":"500kB","maximumError":"1MB"}]}},"defaultConfiguration":"production"},"serve":{"builder":"@angular/build:dev-server","options":{"buildTarget":"tee-trade:build"}}}}}}
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "projects": {
+    "tee-trade": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.json",
+            "index": "src/index.html",
+            "styles": [
+              "src/styles.css"
+            ],
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ]
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all",
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                }
+              ]
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "buildTarget": "tee-trade:build"
+          }
+        }
+      }
+    }
+  }
+}
