@@ -64,7 +64,7 @@ export class ChatDialog implements AfterViewInit,OnDestroy {
   private bottom(){setTimeout(()=>{if(!this.destroyed){const el=this.scrollArea.nativeElement;el.scrollTop=el.scrollHeight;}},0);}
   private ack(){this.outbound=null;this.pending.set(false);this.draft='';this.error.set('');clearTimeout(this.acknowledgementTimer);}
   private transmit(){if(this.outbound&&this.socket?.readyState===WebSocket.OPEN){this.socket.send(JSON.stringify(this.outbound));clearTimeout(this.acknowledgementTimer);this.acknowledgementTimer=setTimeout(()=>this.socket?.close(),10000);}}
-  send(){if(!this.connected()||this.pending()||!this.draft.trim())return;this.error.set('');this.pending.set(true);this.outbound={type:'message',client_id:crypto.randomUUID(),body:this.draft.trim()};this.transmit();this.typingEvent(false);}
+  send(){if(!this.connected()||this.pending()||!this.draft.trim())return;this.error.set('');this.pending.set(true);this.outbound={type:'message',client_id:Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''),body:this.draft.trim()};this.transmit();this.typingEvent(false);}
   onKey(event:KeyboardEvent){if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();this.send();}}
   private typingEvent(active:boolean){if(this.socket?.readyState===WebSocket.OPEN)this.socket.send(JSON.stringify({type:'typing',active}));}
   onTyping(){if(Date.now()-this.lastTyping>1000){this.lastTyping=Date.now();this.typingEvent(!!this.draft.trim());}clearTimeout(this.stopTypingTimer);this.stopTypingTimer=setTimeout(()=>this.typingEvent(false),2000);}
