@@ -12,7 +12,7 @@
       <button class="button dark" type="submit" [disabled]="busy() || loginForm.invalid">{{ busy() ? 'Входим…' : 'Войти' }}</button>
     </form>
   } @else {
-    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="tab.set('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="tab.set('storefront')">Главная страница</button><button [class.active]="tab() === 'chats'" (click)="tab.set('chats')">Чаты</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин ↗</a></nav>
+    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="tab.set('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="tab.set('storefront')">Главная страница</button><button [class.active]="tab() === 'chats'" (click)="tab.set('chats')">Чаты</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
     @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
     @if (notice()) { <p class="form-success" role="status">{{ notice() }}</p> }
     @if (tab() === 'products') {
@@ -43,7 +43,7 @@
             </section>
           </fieldset>
           @if (uploading()) { <p role="status">Загружаем и обрабатываем фотографии…</p> }
-          <div class="save-row"><button class="button dark" type="submit" [disabled]="busy() || uploading() || productForm.invalid">{{ busy() ? 'Сохраняем…' : 'Сохранить товар' }}</button>@if (editId()) { <a class="text-link" [routerLink]="['/product', editId()]" target="_blank" rel="noopener">Посмотреть товар ↗</a> }</div>
+          <div class="save-row"><button class="button dark" type="submit" [disabled]="busy() || uploading() || productForm.invalid">{{ busy() ? 'Сохраняем…' : 'Сохранить товар' }}</button>@if (editId()) { <a class="text-link" [routerLink]="['/product', editId()]" target="_blank" rel="noopener">Посмотреть товар</a> }</div>
         </form>
       }
     } @else if (tab() === 'chats') { <app-chat-list [admin]="true" /> } @else if (settings(); as config) {

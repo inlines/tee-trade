@@ -18,8 +18,8 @@ async function request(actor,path,method='GET',body,expected=200,extra={}){
  const data=response.status===204?null:response.headers.get('content-type')?.includes('application/json')?await response.json():await response.text();
  if(data?.csrf_token)actor.csrf=data.csrf_token;return data;
 }
-async function connect(actor,id,adminSide=false,origin=base){
- const ws=new WebSocket(base.replace(/^http/,'ws')+`/api/${adminSide?'admin':'auth'}/chats/ws?chat_id=${id}`,{headers:{Cookie:actor.cookie,Origin:origin}});
+async function connect(actor,id,adminSide=false,origin=base,events=false,after){
+ const ws=new WebSocket(base.replace(/^http/,'ws')+(events?`/api/admin/chats/events${after===undefined?'':'?after='+after}`:`/api/${adminSide?'admin':'auth'}/chats/ws?chat_id=${id}`),{headers:{Cookie:actor.cookie,Origin:origin}});
  const queue=[];let notify;ws.addEventListener('message',e=>{queue.push(JSON.parse(e.data));notify?.();});
  await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{ws.close();reject(Error('WebSocket handshake timeout'));},5000);ws.addEventListener('open',()=>{clearTimeout(timeout);resolve();},{once:true});ws.addEventListener('error',()=>{clearTimeout(timeout);reject(Error('WebSocket rejected'));},{once:true});});
  const item={ws,send:value=>ws.send(JSON.stringify(value)),async wait(predicate){const deadline=Date.now()+5000;while(Date.now()<deadline){const index=queue.findIndex(predicate);if(index>=0)return queue.splice(index,1)[0];await new Promise(resolve=>{const timer=setTimeout(resolve,100);notify=()=>{clearTimeout(timer);resolve();};});}throw Error('Missing WebSocket event');}};sockets.push(item);return item;
@@ -37,12 +37,16 @@ try{
  await assert.rejects(()=>connect(stranger,chat.id));
  await assert.rejects(()=>connect(buyer,chat.id,false,'https://untrusted.invalid'));
  await assert.rejects(()=>connect({cookie:''},chat.id));
+ await assert.rejects(()=>connect(buyer,chat.id,true,base,true));
+ const notifications=await connect(admin,chat.id,true,base,true);await notifications.wait(e=>e.type==='ready');
  const b=await connect(buyer,chat.id), a=await connect(admin,chat.id,true);
  assert.deepEqual((await b.wait(e=>e.type==='history')).messages,[]);await a.wait(e=>e.type==='history');
  b.send({type:'typing',active:true});assert.equal((await a.wait(e=>e.type==='typing'&&!e.is_admin)).active,true);
  const outgoing={type:'message',client_id:randomUUID(),body:'Здравствуйте, какой размер?'};b.send(outgoing);
  const saved=(await b.wait(e=>e.type==='message')).message;
  assert.equal((await a.wait(e=>e.type==='message')).message.id,saved.id);
+ const notice=await notifications.wait(e=>e.type==='notification');assert.equal(notice.chat.id,chat.id);assert.equal(notice.message.id,saved.id);assert.equal(notice.chat.username,names[0]);
+ const resumedNotifications=await connect(admin,chat.id,true,base,true,saved.id-1);assert.equal((await resumedNotifications.wait(e=>e.type==='notification')).message.id,saved.id);await resumedNotifications.wait(e=>e.type==='ready');resumedNotifications.ws.close();
  await pause();b.send(outgoing);assert.equal((await b.wait(e=>e.type==='message')).message.id,saved.id);
  assert.equal((await request(buyer,`/api/auth/chats/${chat.id}/messages`)).messages.length,1);
  a.send({type:'typing',active:true});assert.equal((await b.wait(e=>e.type==='typing'&&e.is_admin&&e.active)).active,true);
@@ -63,7 +67,7 @@ try{
  assert.equal((await request(buyer,`/api/auth/chats/${chat.id}/messages`)).messages.length,100);
  await request(buyer,'/api/auth/logout','POST',{},204);
  reopened.send({type:'typing',active:true});await reopened.wait(e=>e.type==='unauthorized');
- console.log('PASS: WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
+ console.log('PASS: admin notifications and replay, WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
 }finally{
  for(const item of sockets)item.ws.close();
  if(productId)await request(admin,`/api/admin/products/${productId}`,'DELETE',undefined,204);

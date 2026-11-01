@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, of, startWith, Subject, switchMap } from 'rxjs';
 import { CatalogService, categories, categoryName, loadState, LoadState, Product } from './catalog';
+import { AdminService } from './admin.service';
 import { ChatService } from './chat.service';
 import { CustomerService } from './customer.service';
 import { ProductCard } from './product-card';
@@ -25,11 +26,11 @@ import { ProductCarousel } from './product-carousel';
           </section>
         }
         @if (home.settings.popular_enabled) {
-          <section class="section"><div class="section-heading"><div><h2>{{ home.settings.popular_title }}</h2></div><a class="text-link" routerLink="/catalog">Все вещи ↗</a></div>
+          <section class="section"><div class="section-heading"><div><h2>{{ home.settings.popular_title }}</h2></div><a class="text-link" routerLink="/catalog">Все вещи</a></div>
             <div class="product-grid">@for (product of home.featured; track product.id) { <app-product-card [product]="product" /> } @empty { <p class="status">Скоро здесь появятся первые вещи.</p> }</div>
           </section>
         }
-        @if (home.settings.manifesto_enabled) { <section class="manifesto"><p class="eyebrow">{{ home.settings.manifesto_eyebrow }}</p><h2 style="white-space:pre-line">{{ home.settings.manifesto_title }}</h2><a class="text-link" routerLink="/about">{{ home.settings.manifesto_link_text }}</a></section> }
+        @if (home.settings.manifesto_enabled) { <section class="manifesto"><p class="eyebrow">{{ home.settings.manifesto_eyebrow }}</p><h2 style="white-space:pre-line">{{ home.settings.manifesto_title }}</h2><a class="text-link" routerLink="/about">{{ home.settings.manifesto_link_text.replaceAll('↗', '').trim() }}</a></section> }
       </div>
     }
   }`,
@@ -94,20 +95,19 @@ export class CatalogPage {
       <nav class="breadcrumbs" aria-label="Хлебные крошки"><a routerLink="/">Главная</a><span>/</span><a routerLink="/catalog">Каталог</a><span>/</span><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a><span>/</span><span>{{ product.name || 'Без названия' }}</span></nav>
       <section class="product-detail">
         <div class="gallery">
-          @if (activeImage(); as image) { <div class="gallery-main"><img [src]="image.url" [alt]="image.alt" width="640" height="720"><span class="image-caption">{{ image.kind === 'label' ? 'Ярлычок' : image.kind === 'front' ? 'Основной вид' : 'Детали' }} · {{ activeIndex() + 1 }} / {{ product.images.length }}</span></div> }
+          @if (activeImage(); as image) { <div class="gallery-main"><img [src]="image.url" [alt]="image.alt" width="640" height="720"></div> }
           @if (!activeImage()) { <div class="gallery-main"><img src="/images/no-photo.svg" alt="Фото пока нет" width="640" height="720"></div> }
           <div class="thumbnails" aria-label="Фотографии товара">@for (image of product.images; track $index; let i = $index) {
-            <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="image.url" alt="" width="100" height="110"><span>{{ image.kind === 'label' ? 'Ярлычок' : image.kind === 'front' ? 'Основной вид' : 'Детали' }}</span></button>
+            <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="image.url" alt="" width="100" height="110"></button>
           }</div>
         </div>
         <div class="product-info"><p class="eyebrow">{{ product.brand }}{{ product.brand && product.release_year ? ' / ' : '' }}{{ product.release_year }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
-          <dl><div><dt>Бренд</dt><dd>{{ product.brand || 'Не указан' }}</dd></div><div><dt>Год выпуска</dt><dd>{{ product.release_year || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }} ↗</a></dd></div></dl>
+          <dl><div><dt>Бренд</dt><dd>{{ product.brand || 'Не указан' }}</dd></div><div><dt>Год выпуска</dt><dd>{{ product.release_year || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
-          @if (hasLabel(product)) { <div class="label-note"><span aria-hidden="true">↗</span><div><strong>Детали имеют значение</strong><p>Снимок ярлычка — отдельное изображение в галерее.</p><button class="text-link" (click)="showLabel(product)">Посмотреть ярлычок</button></div></div> }
           @if (product.is_demo) { <p class="demo-note">Демонстрационный товар. В галерее — иллюстрации, включая шаблон ярлычка. Они не заменяют фотографии реальной вещи.</p> }
-          @if (customer.session()) { <button class="button dark" (click)="openChat(product.id)" [disabled]="openingChat()">{{ openingChat() ? 'Открываем чат…' : 'Написать' }}</button> }
+          @if (customer.session() && !admin.session()) { <button class="button dark" (click)="openChat(product.id)" [disabled]="openingChat()">{{ openingChat() ? 'Открываем чат…' : 'Написать' }}</button> }
           @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
-          @if (customer.ready() && !customer.session()) {
+          @if (customer.ready() && !customer.session() && !admin.session()) {
             <p class="seller-contact">Чтобы написать продавцу, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
           }
           <a class="text-link back-link" [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">← Назад в раздел</a>
@@ -117,6 +117,7 @@ export class CatalogPage {
   }`,
 })
 export class ProductPage {
+  readonly admin = inject(AdminService);
   readonly chats = inject(ChatService);
   readonly openingChat = signal(false);
   readonly chatError = signal('');
@@ -136,16 +137,14 @@ export class ProductPage {
   readonly activeImage = computed(() => this.state()?.data?.images[this.activeIndex()]);
   readonly categoryName = categoryName;
   choose(productId: number, index: number) { this.selection.set({ productId, index }); }
-  hasLabel(product: Product) { return product.images.some(image => image.kind === 'label'); }
-  showLabel(product: Product) { const index = product.images.findIndex(image => image.kind === 'label'); if (index >= 0) this.choose(product.id, index); }
 }
 
 @Component({
   selector: 'app-about', imports: [RouterLink],
   template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / О НАС</p><h1>Вещи с характером.<br><span class="muted">Люди со своим стилем.</span></h1></section>
-    <section class="about-layout"><div class="about-mark" aria-hidden="true">TEE<br>TRADE<span>ВЫБИРАЙ СВОЁ.</span></div><div class="about-copy"><p class="eyebrow">О ПРОЕКТЕ</p><h2>Гардероб начинается<br>с любопытства.</h2><p>Tee Trade — каталог футболок, кроссовок, аксессуаров и головных уборов. Место, где можно спокойно рассмотреть вещь и найти то, что подходит именно тебе.</p><p>Мы строим каталог вокруг деталей: у каждой позиции есть бренд, год выпуска, тематика и описание. Несколько ракурсов и отдельное фото ярлычка помогают узнать вещь ближе.</p><a class="button dark" routerLink="/catalog">Найти свою вещь ↗</a></div></section>
+    <section class="about-layout"><div class="about-mark" aria-hidden="true">TEE<br>TRADE<span>ВЫБИРАЙ СВОЁ.</span></div><div class="about-copy"><p class="eyebrow">О ПРОЕКТЕ</p><h2>Гардероб начинается<br>с любопытства.</h2><p>Tee Trade — каталог футболок, кроссовок, аксессуаров и головных уборов. Место, где можно спокойно рассмотреть вещь и найти то, что подходит именно тебе.</p><p>Мы строим каталог вокруг деталей: у каждой позиции есть бренд, год выпуска, тематика и описание. Несколько ракурсов и отдельное фото ярлычка помогают узнать вещь ближе.</p><a class="button dark" routerLink="/catalog">Найти свою вещь</a></div></section>
     <section class="about-principles"><article><p class="eyebrow">01 / ВЫБОР</p><h3>Не только футболки</h3><p>Четыре категории, которые легко собрать в собственный образ.</p></article><article><p class="eyebrow">02 / КОНТЕКСТ</p><h3>Больше, чем название</h3><p>Бренд, год и тематика помогают понять характер каждой вещи.</p></article><article><p class="eyebrow">03 / ДЕТАЛИ</p><h3>Рассмотреть поближе</h3><p>Основной вид, детали и ярлычок — в одной галерее.</p></article></section>`,
 })
 export class AboutPage {}
-@Component({ selector: 'app-not-found', imports: [RouterLink], template: `<div class="status"><p class="eyebrow">404</p><h1>Страница не найдена</h1><p>Возможно, адрес изменился.</p><a class="button dark" routerLink="/catalog">Перейти в каталог ↗</a></div>` })
+@Component({ selector: 'app-not-found', imports: [RouterLink], template: `<div class="status"><p class="eyebrow">404</p><h1>Страница не найдена</h1><p>Возможно, адрес изменился.</p><a class="button dark" routerLink="/catalog">Перейти в каталог</a></div>` })
 export class NotFoundPage {}

@@ -7,7 +7,7 @@ import { categories } from './catalog';
 @Component({
   selector: 'app-catalog-menu',
   imports: [RouterLink, RouterLinkActive],
-  template: `<details #dropdown class="catalog-dropdown" routerLinkActive="active" (focusout)="onFocusOut($event)">
+  template: `<details #dropdown class="catalog-dropdown" routerLinkActive="active" (focusout)="onFocusOut($event)" (toggle)="positionMenu()">
     <summary>Каталог <svg class="dropdown-chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" /></svg></summary>
     <div class="catalog-dropdown-panel">
       <a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page" (click)="close()">Все вещи</a>
@@ -27,6 +27,19 @@ export class CatalogMenu {
       .subscribe(() => this.close());
   }
 
+  @HostListener('window:resize')
+  @HostListener('window:scroll')
+  positionMenu() {
+    const details=this.dropdown?.nativeElement;
+    if(!details?.open)return;
+    const panel=details.querySelector<HTMLElement>('.catalog-dropdown-panel')!;
+    const anchor=details.querySelector('summary')!.getBoundingClientRect();
+    const width=Math.min(260,document.documentElement.clientWidth-24);
+    const height=window.innerHeight;
+    panel.style.width=width+'px'; panel.style.maxHeight=Math.max(80,height-24)+'px';
+    panel.style.left=Math.max(12,Math.min(anchor.right-width,document.documentElement.clientWidth-width-12))+'px';
+    panel.style.top=Math.max(12,Math.min(anchor.bottom+8,height-panel.getBoundingClientRect().height-12))+'px';
+  }
   close() { if (this.dropdown) this.dropdown.nativeElement.open = false; }
 
   @HostListener('document:click', ['$event'])

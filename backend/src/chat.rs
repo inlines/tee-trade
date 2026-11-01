@@ -17,7 +17,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Serialize, sqlx::FromRow)]
+#[derive(Clone, Serialize, Deserialize, sqlx::FromRow)]
 struct ChatMessage {
     id: i64,
     chat_id: i64,
@@ -54,6 +54,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/auth/chats", get(customer_list).post(create))
         .route("/api/admin/chats", get(admin_list))
+        .route("/api/admin/chats/events", get(admin_events))
         .route("/api/auth/chats/{id}/messages", get(customer_history))
         .route("/api/admin/chats/{id}/messages", get(admin_history))
         .route("/api/auth/chats/ws", get(customer_ws))
@@ -352,5 +353,81 @@ async fn connection(mut socket: WebSocket, s: AppState, a: Actor, id: i64) {
         chat_id: id,
         payload: serde_json::json!({"type":"typing","is_admin":a.is_admin,"active":false}),
     });
+    let _ = socket.send(Message::Close(None)).await;
+}
+
+#[derive(Deserialize)]
+struct EventsQuery {
+    after: Option<i64>,
+}
+async fn admin_events(
+    State(s): State<AppState>,
+    h: HeaderMap,
+    Query(q): Query<EventsQuery>,
+    ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
+    if h.get(header::ORIGIN).and_then(|v| v.to_str().ok()) != Some(s.admin_origin.as_str()) {
+        return Err((StatusCode::FORBIDDEN, "Недопустимый источник запроса"));
+    }
+    let a = actor(&s, &h, true).await?;
+    Ok(ws
+        .max_message_size(1024)
+        .on_upgrade(move |socket| notifications(socket, s, a, q.after)))
+}
+async fn notification(s: &AppState, message: &ChatMessage) -> Result<serde_json::Value, ApiError> {
+    let chat: Chat = sqlx::query_as(&format!("{CHAT_SELECT} WHERE c.id=$1"))
+        .bind(message.chat_id)
+        .fetch_one(&s.db)
+        .await
+        .map_err(internal)?;
+    Ok(serde_json::json!({"type":"notification","message":message,"chat":chat}))
+}
+async fn notifications(mut socket: WebSocket, s: AppState, a: Actor, after: Option<i64>) {
+    let mut events = s.chat_events.subscribe();
+    // Initial connection establishes a baseline; reconnect catches messages missed offline.
+    let latest: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(id),0) FROM chat_messages")
+        .fetch_one(&s.db)
+        .await
+        .unwrap_or(0);
+    if let Some(after) = after {
+        let messages:Vec<ChatMessage>=sqlx::query_as(&format!("SELECT {MESSAGE_COLUMNS} FROM chat_messages WHERE NOT is_admin AND id>$1 ORDER BY id DESC LIMIT 100")).bind(after).fetch_all(&s.db).await.unwrap_or_default();
+        for message in messages.iter().rev() {
+            if let Ok(value) = notification(&s, message).await {
+                if !send(&mut socket, value).await {
+                    return;
+                }
+            }
+        }
+    }
+    if !send(
+        &mut socket,
+        serde_json::json!({"type":"ready","cursor":latest}),
+    )
+    .await
+    {
+        return;
+    }
+    let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
+    loop {
+        tokio::select! {
+            _=heartbeat.tick()=>{
+                if !active(&s,&a).await {let _=send(&mut socket,serde_json::json!({"type":"unauthorized"})).await;break;}
+                if socket.send(Message::Ping(Vec::new().into())).await.is_err(){break;}
+            }
+            event=events.recv()=>match event {
+                Ok(event)=>{
+                    if event.payload.get("type").and_then(|v|v.as_str())!=Some("message"){continue;}
+                    if !active(&s,&a).await{break;}
+                    if let Some(value)=event.payload.get("message") {
+                        if let Ok(message)=serde_json::from_value::<ChatMessage>(value.clone()){
+                            if !message.is_admin {if let Ok(payload)=notification(&s,&message).await {if !send(&mut socket,payload).await {break;}}}
+                        }
+                    }
+                }
+                Err(_)=>break
+            },
+            message=socket.recv()=>match message {Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break,_=>{}}
+        }
+    }
     let _ = socket.send(Message::Close(None)).await;
 }

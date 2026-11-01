@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AdminService, ProductDraft, StorefrontSettings } from './admin.service';
+import { ChatService } from './chat.service';
 import { ChatList } from './chat-list';
 import { Product, ProductImage, categories } from './catalog';
 
@@ -13,6 +14,7 @@ import { Product, ProductImage, categories } from './catalog';
 })
 export class AdminPage {
   readonly api = inject(AdminService);
+  private readonly chatApi = inject(ChatService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   readonly categories = categories;
@@ -45,6 +47,12 @@ export class AdminPage {
   private async load() {
     const [products, settings] = await Promise.all([this.api.list(), this.api.settings()]);
     this.products.set(products); this.settings.set(settings);
+    const chatId = this.route.snapshot.queryParamMap.get('chat');
+    if(chatId){
+      this.tab.set('chats');
+      const chat=(await this.chatApi.list(true)).find(chat=>chat.id===Number(chatId));
+      if(chat)this.chatApi.open(chat,true);else this.error.set('Чат не найден.');
+    }
     const requestedId = this.route.snapshot.queryParamMap.get('edit');
     if (requestedId !== null) {
       const product = products.find(item => item.id === Number(requestedId));

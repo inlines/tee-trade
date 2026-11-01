@@ -76,3 +76,6 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
 
 .button.danger { color:#852e22; border-color:#cda99e; }
 .button.danger:hover:not(:disabled) { background:#f6e6e1; }
+.account { flex-wrap:wrap; min-width:0; overflow-wrap:anywhere; }
+.selected-products li>span { min-width:0; overflow-wrap:anywhere; }
+.admin-product h3,.admin-product p { overflow-wrap:anywhere; }

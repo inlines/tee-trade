@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CustomerService } from './customer.service';
@@ -10,8 +10,9 @@ export class ChatService {
   private readonly http=inject(HttpClient);
   private readonly customer=inject(CustomerService);
   readonly selected=signal<{chat:Chat; admin:boolean}|null>(null);
+  readonly active=computed(()=>{const selected=this.selected();return selected?[selected]:[];});
   list(admin=false) {return firstValueFrom(this.http.get<Chat[]>(`/api/${admin?'admin':'auth'}/chats`));}
-  history(id:number,admin:boolean,before:number) {return firstValueFrom(this.http.get<History>(`/api/${admin?'admin':'auth'}/chats/${id}/messages`,{params:{before}}));}
+  history(id:number,admin:boolean,before?:number) {return firstValueFrom(this.http.get<History>(`/api/${admin?'admin':'auth'}/chats/${id}/messages`,{params:before===undefined?{}:{before}}));}
   async openProduct(productId:number) {
     const chat=await firstValueFrom(this.http.post<Chat>('/api/auth/chats',{product_id:productId},{headers:{'X-CSRF-Token':this.customer.session()?.csrf_token??''}}));
     this.open(chat,false);
