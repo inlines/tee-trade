@@ -1,7 +1,8 @@
+# syntax=docker/dockerfile:1
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,id=tee-trade-npm,target=/root/.npm,sharing=locked npm ci --prefer-offline --no-audit --no-fund
 COPY . .
 RUN npm run build
 
