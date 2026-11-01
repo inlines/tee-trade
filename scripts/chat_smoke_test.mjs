@@ -19,7 +19,7 @@ async function request(actor,path,method='GET',body,expected=200,extra={}){
  if(data?.csrf_token)actor.csrf=data.csrf_token;return data;
 }
 async function connect(actor,id,adminSide=false,origin=base,events=false,after){
- const ws=new WebSocket(base.replace(/^http/,'ws')+(events?`/api/admin/chats/events${after===undefined?'':'?after='+after}`:`/api/${adminSide?'admin':'auth'}/chats/ws?chat_id=${id}`),{headers:{Cookie:actor.cookie,Origin:origin}});
+ const ws=new WebSocket(base.replace(/^http/,'ws')+(events?`/api/${adminSide?'admin':'auth'}/chats/events${after===undefined?'':'?after='+after}`:`/api/${adminSide?'admin':'auth'}/chats/ws?chat_id=${id}`),{headers:{Cookie:actor.cookie,Origin:origin}});
  const queue=[];let notify;ws.addEventListener('message',e=>{queue.push(JSON.parse(e.data));notify?.();});
  await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{ws.close();reject(Error('WebSocket handshake timeout'));},5000);ws.addEventListener('open',()=>{clearTimeout(timeout);resolve();},{once:true});ws.addEventListener('error',()=>{clearTimeout(timeout);reject(Error('WebSocket rejected'));},{once:true});});
  const item={ws,send:value=>ws.send(JSON.stringify(value)),async wait(predicate){const deadline=Date.now()+5000;while(Date.now()<deadline){const index=queue.findIndex(predicate);if(index>=0)return queue.splice(index,1)[0];await new Promise(resolve=>{const timer=setTimeout(resolve,100);notify=()=>{clearTimeout(timer);resolve();};});}throw Error('Missing WebSocket event');}};sockets.push(item);return item;
@@ -39,6 +39,10 @@ try{
  await assert.rejects(()=>connect({cookie:''},chat.id));
  await assert.rejects(()=>connect(buyer,chat.id,true,base,true));
  const notifications=await connect(admin,chat.id,true,base,true);await notifications.wait(e=>e.type==='ready');
+ const buyerEvents=await connect(buyer,chat.id,false,base,true);await buyerEvents.wait(e=>e.type==='ready');
+ const otherEvents=await connect(stranger,chat.id,false,base,true);await otherEvents.wait(e=>e.type==='ready');
+ await assert.rejects(()=>connect({cookie:''},chat.id,false,base,true));
+ await assert.rejects(()=>connect(buyer,chat.id,false,'https://untrusted.invalid',true));
  const b=await connect(buyer,chat.id), a=await connect(admin,chat.id,true);
  assert.deepEqual((await b.wait(e=>e.type==='history')).messages,[]);await a.wait(e=>e.type==='history');
  b.send({type:'typing',active:true});assert.equal((await a.wait(e=>e.type==='typing'&&!e.is_admin)).active,true);
@@ -52,7 +56,14 @@ try{
  a.send({type:'typing',active:true});assert.equal((await b.wait(e=>e.type==='typing'&&e.is_admin&&e.active)).active,true);
  a.send({type:'message',client_id:randomUUID(),body:'Здравствуйте! Размер L.'});
  assert.equal((await b.wait(e=>e.type==='message'&&e.message.is_admin)).message.body,'Здравствуйте! Размер L.');
- await a.wait(e=>e.type==='message'&&e.message.is_admin);
+ const reply=(await a.wait(e=>e.type==='message'&&e.message.is_admin)).message;
+ const buyerNotice=await buyerEvents.wait(e=>e.type==='notification');assert.equal(buyerNotice.chat.id,chat.id);assert.equal(buyerNotice.message.id,reply.id);
+ const buyerReplay=await connect(buyer,chat.id,false,base,true,reply.id-1);assert.equal((await buyerReplay.wait(e=>e.type==='notification')).message.id,reply.id);await buyerReplay.wait(e=>e.type==='ready');buyerReplay.ws.close();
+ const strangerReplay=await connect(stranger,chat.id,false,base,true,0);assert.equal((await strangerReplay.wait(e=>e.type==='ready')).cursor,0);
+ await assert.rejects(()=>strangerReplay.wait(e=>e.type==='notification'));
+ await assert.rejects(()=>otherEvents.wait(e=>e.type==='notification'));
+ await assert.rejects(()=>buyerEvents.wait(e=>e.type==='notification'&&!e.message.is_admin));
+ strangerReplay.ws.close();otherEvents.ws.close();
  b.ws.close();const reopened=await connect(buyer,chat.id);assert.equal((await reopened.wait(e=>e.type==='history')).messages.length,2);
  assert.equal((await request(admin,'/api/admin/chats')).find(c=>c.id===chat.id).last_message,'Здравствуйте! Размер L.');
  await pause();a.send({type:'message',client_id:randomUUID(),body:' '});await a.wait(e=>e.type==='error');
@@ -67,7 +78,7 @@ try{
  assert.equal((await request(buyer,`/api/auth/chats/${chat.id}/messages`)).messages.length,100);
  await request(buyer,'/api/auth/logout','POST',{},204);
  reopened.send({type:'typing',active:true});await reopened.wait(e=>e.type==='unauthorized');
- console.log('PASS: admin notifications and replay, WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
+ console.log('PASS: admin and customer notifications, replay and isolation, WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
 }finally{
  for(const item of sockets)item.ws.close();
  if(productId)await request(admin,`/api/admin/products/${productId}`,'DELETE',undefined,204);
