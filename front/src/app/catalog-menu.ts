@@ -58,6 +58,9 @@ export class CatalogMenu {
   }
 
   onFocusOut(event: FocusEvent) {
-    if (!this.element.nativeElement.contains(event.relatedTarget as Node | null)) this.close();
+    // Touch browsers can blur the summary with no new focus target before
+    // dispatching the link's click. Keep it visible so that tap can complete.
+    // An outside click or completed navigation still closes the menu.
+    if (event.relatedTarget instanceof Node && !this.element.nativeElement.contains(event.relatedTarget)) this.close();
   }
 }
