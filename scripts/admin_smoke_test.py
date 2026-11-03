@@ -59,10 +59,10 @@ def upload(content, expected=201, filename='test.png'):
         return result['url']
 
 
-def png():
+def png(width=2, height=2):
     def chunk(kind, content):
         return struct.pack('!I', len(content)) + kind + content + struct.pack('!I', zlib.crc32(kind + content) & 0xffffffff)
-    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 2, 2, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + b'\x80\x90\x70' * 2) * 2)) + chunk(b'IEND', b'')
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + b'\x80\x90\x70' * width) * height)) + chunk(b'IEND', b'')
 
 
 try:
@@ -96,11 +96,36 @@ try:
     request(f"/api/admin/products/{empty['id']}", 'PUT', {})
     request(f"/api/admin/products/{empty['id']}", 'DELETE', expected=204)
     print('PASS: create, retrieve and edit an entirely empty product')
-    main_url = upload(png())
+    main_url = upload(png(800,600))
     label_url = upload(png())
     content, headers = request(main_url, auth=False)
     assert content.startswith(b'\xff\xd8') and headers['Content-Type'] == 'image/jpeg'
     assert headers['X-Content-Type-Options'] == 'nosniff'
+    def dimensions(jpeg):
+        # The encoder emits baseline JPEG (SOF0).
+        offset = 2
+        while offset < len(jpeg):
+            marker = jpeg[offset:offset+2]
+            size = struct.unpack('!H', jpeg[offset+2:offset+4])[0]
+            if marker == b'\xff\xc0':
+                height, width = struct.unpack('!HH', jpeg[offset+5:offset+9])
+                return width, height
+            offset += size + 2
+        raise AssertionError('JPEG dimensions missing')
+    preview, preview_headers = request(main_url + '/preview', auth=False)
+    assert dimensions(content) == (2400,1800)
+    assert dimensions(preview) == (480,360)
+    assert len(preview) < len(content) and 'immutable' in preview_headers['Cache-Control']
+    media_id = main_url.rsplit('/',1)[-1]
+    assert len(media_id)==64 and all(c in '0123456789abcdef' for c in media_id)
+    subprocess.run(['docker','compose','exec','-T','postgres','sh','-c','psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1'],input=f"UPDATE media SET preview=NULL WHERE id='{media_id}';",text=True,check=True,stdout=subprocess.DEVNULL)
+    regenerated, _ = request(main_url + '/preview', auth=False)
+    assert dimensions(regenerated) == (480,360)
+    assert request(main_url, auth=False)[0] == content
+    assert request(main_url + '/preview', auth=False)[0] == regenerated
+    request('/api/media/invalid/preview', expected=404, auth=False)
+    print('PASS: small previews, lazy generation for old photos, immutable caching, unchanged large image')
+
     product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brand':'Test', 'release_year':2026,
                'description':'Temporary integration fixture', 'theme':'Test', 'price_cents':12345, 'is_demo':False,
                'images':[{'url':main_url, 'alt':'Test front', 'kind':'front'}, {'url':label_url, 'alt':'Test gallery', 'kind':'detail', 'carousel':True}]}

@@ -435,42 +435,45 @@ async fn upload(
     {
         return Err(bad("Загружайте по одному файлу"));
     }
-    let jpeg = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, ApiError> {
-        let format =
-            image::guess_format(&bytes).map_err(|_| bad("Поддерживаются JPEG, PNG и WebP"))?;
-        if !matches!(
-            format,
-            image::ImageFormat::Jpeg | image::ImageFormat::Png | image::ImageFormat::WebP
-        ) {
-            return Err(bad("Поддерживаются JPEG, PNG и WebP"));
-        }
-        let mut reader = image::ImageReader::with_format(Cursor::new(bytes), format);
-        let mut limits = image::Limits::default();
-        limits.max_image_width = Some(8000);
-        limits.max_image_height = Some(8000);
-        limits.max_alloc = Some(128 * 1024 * 1024);
-        reader.limits(limits);
-        let mut decoder = reader
-            .into_decoder()
-            .map_err(|_| bad("Фото повреждено или превышает допустимое разрешение"))?;
-        let orientation = decoder
-            .orientation()
-            .map_err(|_| bad("Не удалось прочитать ориентацию фото"))?;
-        let mut decoded = image::DynamicImage::from_decoder(decoder)
-            .map_err(|_| bad("Фото повреждено или превышает допустимое разрешение"))?;
-        decoded.apply_orientation(orientation);
-        let mut output = Vec::new();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, 90)
-            .encode_image(&decoded.thumbnail(2400, 2400).to_rgb8())
-            .map_err(internal)?;
-        Ok(output)
-    })
-    .await
-    .map_err(internal)??;
+    let (jpeg, preview) =
+        tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, Vec<u8>), ApiError> {
+            let format =
+                image::guess_format(&bytes).map_err(|_| bad("Поддерживаются JPEG, PNG и WebP"))?;
+            if !matches!(
+                format,
+                image::ImageFormat::Jpeg | image::ImageFormat::Png | image::ImageFormat::WebP
+            ) {
+                return Err(bad("Поддерживаются JPEG, PNG и WebP"));
+            }
+            let mut reader = image::ImageReader::with_format(Cursor::new(bytes), format);
+            let mut limits = image::Limits::default();
+            limits.max_image_width = Some(8000);
+            limits.max_image_height = Some(8000);
+            limits.max_alloc = Some(128 * 1024 * 1024);
+            reader.limits(limits);
+            let mut decoder = reader
+                .into_decoder()
+                .map_err(|_| bad("Фото повреждено или превышает допустимое разрешение"))?;
+            let orientation = decoder
+                .orientation()
+                .map_err(|_| bad("Не удалось прочитать ориентацию фото"))?;
+            let mut decoded = image::DynamicImage::from_decoder(decoder)
+                .map_err(|_| bad("Фото повреждено или превышает допустимое разрешение"))?;
+            decoded.apply_orientation(orientation);
+            let mut output = Vec::new();
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, 90)
+                .encode_image(&decoded.thumbnail(2400, 2400).to_rgb8())
+                .map_err(internal)?;
+            let preview = encode_preview(&decoded)?;
+            Ok((output, preview))
+        })
+        .await
+        .map_err(internal)??;
     let id = token();
-    sqlx::query("INSERT INTO media (id, content) VALUES ($1, $2)")
+    sqlx::query("INSERT INTO media (id, content, preview) VALUES ($1, $2, $3)")
         .bind(&id)
         .bind(jpeg)
+        .bind(preview)
         .execute(&state.db)
         .await
         .map_err(internal)?;
@@ -608,4 +611,59 @@ async fn selected_products(db: &PgPool, ids: &[i32]) -> Result<Vec<Product>, Api
     .fetch_all(db)
     .await
     .map_err(internal)
+}
+
+fn encode_preview(decoded: &image::DynamicImage) -> Result<Vec<u8>, ApiError> {
+    let mut output = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, 78)
+        .encode_image(&decoded.thumbnail(480, 480).to_rgb8())
+        .map_err(internal)?;
+    Ok(output)
+}
+pub async fn media_preview(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    if id.len() != 64 || !id.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return Err((StatusCode::NOT_FOUND, "Фото не найдено"));
+    }
+    let preview: Option<Vec<u8>> = sqlx::query_scalar("SELECT preview FROM media WHERE id=$1")
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "Фото не найдено"))?;
+    let bytes = match preview {
+        Some(bytes) => bytes,
+        None => {
+            let original: Vec<u8> = sqlx::query_scalar("SELECT content FROM media WHERE id=$1")
+                .bind(&id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(internal)?
+                .ok_or((StatusCode::NOT_FOUND, "Фото не найдено"))?;
+            let bytes = tokio::task::spawn_blocking(move || {
+                let decoded = image::load_from_memory(&original).map_err(internal)?;
+                encode_preview(&decoded)
+            })
+            .await
+            .map_err(internal)??;
+            sqlx::query("UPDATE media SET preview=$2 WHERE id=$1 AND preview IS NULL")
+                .bind(&id)
+                .bind(&bytes)
+                .execute(&state.db)
+                .await
+                .map_err(internal)?;
+            bytes
+        }
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/jpeg"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        bytes,
+    )
+        .into_response())
 }

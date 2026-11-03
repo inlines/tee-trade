@@ -1,12 +1,11 @@
-import { RequestNotifications } from './request-notifications';
+import { RequestsService } from './requests.service';
 import { Component, OnDestroy, OnInit, inject, input } from '@angular/core';
 import { ChatService } from './chat.service';
 import { AdminService } from './admin.service';
 import { CustomerService } from './customer.service';
 import { NotificationSound } from './notification-sound.service';
 import { ChatNotice, ChatToastStore } from './chat-toasts';
-@Component({selector:'app-chat-notifications',imports:[RequestNotifications],template:`
-  <app-request-notifications [admin]="adminSide()" />
+@Component({selector:'app-chat-notifications',template:`
   <button class="chat-bell" (click)="chats.drawer.set(true)" [attr.aria-label]="'Чаты, непрочитанных сообщений: '+chats.unread()" [attr.aria-expanded]="chats.drawer()" aria-haspopup="dialog">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M9 20a3 3 0 0 0 6 0"/></svg>
     @if(chats.unread()){<span class="bell-dot"></span><span class="bell-count">{{chats.unread()>99?'99+':chats.unread()}}</span>}
@@ -19,17 +18,28 @@ export class ChatNotifications implements OnInit,OnDestroy {
   readonly adminSide=input(false);readonly sound=inject(NotificationSound);private readonly customer=inject(CustomerService);
   readonly chats=inject(ChatService);private readonly admin=inject(AdminService);
   private socket?:WebSocket;private timer?:ReturnType<typeof setTimeout>;private watchdog?:ReturnType<typeof setTimeout>;private destroyed=false;private cursor:number|undefined;private seen=new Set<number>();
-  private poll?:ReturnType<typeof setInterval>;
+  private readonly requests=inject(RequestsService);private requestCursor?:number;
   private readonly resume=()=>{if(!document.hidden&&!this.destroyed)this.connect();};
-  ngOnInit(){this.toasts.clear();this.chats.reset(this.adminSide());void this.chats.refresh(this.adminSide());this.poll=setInterval(()=>{if(!document.hidden)void this.chats.refresh(this.adminSide());},10000);this.connect();window.addEventListener('online',this.resume);document.addEventListener('visibilitychange',this.resume);}
+  ngOnInit(){this.toasts.clear();this.chats.reset(this.adminSide());this.connect();window.addEventListener('online',this.resume);document.addEventListener('visibilitychange',this.resume);}
   private connect(){
     if(this.destroyed||!(this.adminSide()?this.admin.session():this.customer.session()))return;clearTimeout(this.timer);clearTimeout(this.watchdog);this.socket?.close();
-    const socket=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/${this.adminSide()?'admin':'auth'}/chats/events${this.cursor===undefined?'':'?after='+this.cursor}`);this.socket=socket;
+    const params=new URLSearchParams();
+    if(this.cursor!==undefined)params.set('after',String(this.cursor));
+    if(this.requestCursor!==undefined)params.set('request_after',String(this.requestCursor));
+    const socket=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/${this.adminSide()?'admin':'auth'}/chats/events?${params}`);this.socket=socket;
     this.watchdog=setTimeout(()=>socket.close(),10000);
     socket.onmessage=event=>{
       if(this.destroyed||socket!==this.socket)return;
       const data=JSON.parse(event.data);
       if(data.type==='ready'){void this.chats.refresh(this.adminSide());clearTimeout(this.watchdog);this.cursor=Math.max(this.cursor??0,data.cursor);}
+      if(data.type==='chats_changed')void this.chats.refresh(this.adminSide());
+      if(data.type==='request_events'){
+        const events=data.events.filter((e:{id:number})=>this.requestCursor===undefined||e.id>this.requestCursor);
+        this.requestCursor=Math.max(this.requestCursor??0,data.cursor);
+        this.requests.revision.update(v=>v+1);
+        for(const notice of events)this.toasts.addRequest({...notice,admin:this.adminSide()});
+        if(events.length)void this.sound.play();
+      }
       if(data.type==='unauthorized'){(this.adminSide()?this.admin.session:this.customer.session).set(null);return;}
       if(data.type==='notification'){
         void this.chats.refresh(this.adminSide());const notice:ChatNotice={...data,admin:this.adminSide()};this.cursor=Math.max(this.cursor??0,notice.message.id);
@@ -42,5 +52,5 @@ export class ChatNotifications implements OnInit,OnDestroy {
     socket.onclose=()=>{if(!this.destroyed&&this.socket===socket){clearTimeout(this.watchdog);this.timer=setTimeout(()=>this.connect(),3000);}};
     socket.onerror=()=>socket.close();
   }
-  ngOnDestroy(){this.destroyed=true;clearInterval(this.poll);this.chats.reset(this.adminSide());clearTimeout(this.timer);clearTimeout(this.watchdog);this.toasts.clear();this.socket?.close();window.removeEventListener('online',this.resume);document.removeEventListener('visibilitychange',this.resume);}
+  ngOnDestroy(){this.destroyed=true;this.chats.reset(this.adminSide());clearTimeout(this.timer);clearTimeout(this.watchdog);this.toasts.clear();this.socket?.close();window.removeEventListener('online',this.resume);document.removeEventListener('visibilitychange',this.resume);}
 }

@@ -25,6 +25,8 @@ struct AppState {
     monitoring: monitoring::Metrics,
     admin_origin: String,
     secure_cookie: bool,
+    request_events: tokio::sync::broadcast::Sender<i64>,
+    chat_updates: tokio::sync::broadcast::Sender<i64>,
     chat_events: tokio::sync::broadcast::Sender<chat::Event>,
 }
 #[derive(Serialize, Deserialize)]
@@ -191,6 +193,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let monitoring = monitoring::Metrics::new(&registry)?;
     let state = AppState {
         monitoring,
+        request_events: tokio::sync::broadcast::channel(1024).0,
+        chat_updates: tokio::sync::broadcast::channel(1024).0,
         chat_events: tokio::sync::broadcast::channel(1024).0,
         db,
         cache: redis::Client::open(std::env::var("REDIS_URL")?)?,
@@ -212,6 +216,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/api/storefront", get(admin::storefront))
         .route("/api/media/{id}", get(admin::media))
+        .route("/api/media/{id}/preview", get(admin::media_preview))
         .route("/api/products", get(products))
         .route("/api/products/{id}", get(product))
         .route("/health", get(|| async { "ok" }))

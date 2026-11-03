@@ -6,7 +6,7 @@ import { Product } from './catalog';
 @Component({
   selector: 'app-product-card', imports: [RouterLink, CurrencyPipe],
   template: `<a class="product-card" [routerLink]="['/product', product().id]">
-    <div class="product-cover"><img [src]="cover().url" [alt]="cover().alt" loading="lazy" width="640" height="720">
+    <div class="product-cover"><img [src]="previewUrl()" [alt]="cover().alt" loading="lazy" width="640" height="720">
       @if (product().is_demo) { <span class="demo-badge">Демо</span> }
     </div>
     <div class="product-meta"><span>{{ product().brand }}</span><span>{{ product().release_year }}</span></div>
@@ -20,5 +20,6 @@ import { Product } from './catalog';
 export class ProductCard {
   readonly admin = inject(AdminService);
   readonly product = input.required<Product>();
+  previewUrl() { const url=this.cover().url; return /^\/api\/media\/[a-f0-9]{64}$/i.test(url)?url+'/preview':url; }
   cover() { return this.product().images.find(image => image.kind === 'front') ?? this.product().images[0] ?? {url:'/images/no-photo.svg', alt:'Фото пока нет'}; }
 }

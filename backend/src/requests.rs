@@ -135,7 +135,14 @@ async fn create(
         .fetch_one(&mut *tx)
         .await
         .map_err(internal)?;
+    let customer: i64 = sqlx::query_scalar("SELECT customer_id FROM purchase_requests WHERE id=$1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(internal)?;
     tx.commit().await.map_err(internal)?;
+    let _ = s.request_events.send(customer);
+    let _ = s.chat_updates.send(customer);
     Ok((StatusCode::CREATED, Json(row)))
 }
 #[derive(Deserialize)]
@@ -190,7 +197,14 @@ async fn change_status(
         .fetch_one(&mut *tx)
         .await
         .map_err(internal)?;
+    let customer: i64 = sqlx::query_scalar("SELECT customer_id FROM purchase_requests WHERE id=$1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(internal)?;
     tx.commit().await.map_err(internal)?;
+    let _ = s.request_events.send(customer);
+    let _ = s.chat_updates.send(customer);
     Ok(Json(row))
 }
 async fn open_chat(
@@ -215,16 +229,16 @@ struct Cursor {
     after: Option<i64>,
 }
 #[derive(Serialize, sqlx::FromRow)]
-struct Notice {
+pub(crate) struct Notice {
     id: i64,
     request_id: i64,
     product_name: String,
     status: String,
 }
 #[derive(Serialize)]
-struct Events {
-    cursor: i64,
-    events: Vec<Notice>,
+pub(crate) struct Events {
+    pub(crate) cursor: i64,
+    pub(crate) events: Vec<Notice>,
 }
 async fn events(
     s: AppState,
@@ -233,16 +247,24 @@ async fn events(
     admin: bool,
 ) -> Result<Json<Events>, ApiError> {
     let a = chat::actor(&s, &h, admin).await?;
+    events_for_actor(&s, &a, q.after).await.map(Json)
+}
+pub(crate) async fn events_for_actor(
+    s: &AppState,
+    a: &chat::Actor,
+    after: Option<i64>,
+) -> Result<Events, ApiError> {
+    let admin = a.is_admin;
     let latest:i64=sqlx::query_scalar("SELECT COALESCE(MAX(e.id),0) FROM purchase_request_events e JOIN purchase_requests r ON r.id=e.request_id WHERE e.for_admin=$1 AND ($1 OR r.customer_id=$2)").bind(admin).bind(a.customer_id).fetch_one(&s.db).await.map_err(internal)?;
-    let Some(after) = q.after else {
-        return Ok(Json(Events {
+    let Some(after) = after else {
+        return Ok(Events {
             cursor: latest,
             events: vec![],
-        }));
+        });
     };
     let events:Vec<Notice>=sqlx::query_as("SELECT e.id,e.request_id,r.product_name,e.status FROM purchase_request_events e JOIN purchase_requests r ON r.id=e.request_id WHERE e.for_admin=$1 AND ($1 OR r.customer_id=$2) AND e.id>$3 AND e.id<=$4 ORDER BY e.id LIMIT 100").bind(admin).bind(a.customer_id).bind(after.max(0)).bind(latest).fetch_all(&s.db).await.map_err(internal)?;
     let cursor = events.last().map_or(latest, |e| e.id);
-    Ok(Json(Events { cursor, events }))
+    Ok(Events { cursor, events })
 }
 async fn admin_events(
     State(s): State<AppState>,

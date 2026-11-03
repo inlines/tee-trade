@@ -28,6 +28,7 @@ struct ChatMessage {
 }
 #[derive(Clone)]
 pub struct Event {
+    customer_id: i64,
     chat_id: i64,
     payload: serde_json::Value,
 }
@@ -45,7 +46,7 @@ pub(crate) struct Chat {
 }
 pub(crate) struct Actor {
     pub(crate) customer_id: Option<i64>,
-    is_admin: bool,
+    pub(crate) is_admin: bool,
     hash: String,
     pub(crate) csrf: String,
 }
@@ -194,6 +195,7 @@ async fn create(
         .await
         .map_err(internal)?;
     tx.commit().await.map_err(internal)?;
+    let _ = s.chat_updates.send(actor.customer_id.unwrap());
     Ok(Json(chat))
 }
 #[derive(Deserialize)]
@@ -320,6 +322,13 @@ async fn connection(mut socket: WebSocket, s: AppState, a: Actor, id: i64) {
     gauge.inc();
     let _connection = crate::monitoring::Inflight(gauge);
     let mut events = s.chat_events.subscribe();
+    let Ok(customer_id) = sqlx::query_scalar::<_, i64>("SELECT customer_id FROM chats WHERE id=$1")
+        .bind(id)
+        .fetch_one(&s.db)
+        .await
+    else {
+        return;
+    };
     match history(&s, id, None).await {
         Ok(h) => {
             if !send(
@@ -357,14 +366,14 @@ async fn connection(mut socket: WebSocket, s: AppState, a: Actor, id: i64) {
                     Message::Text(text)=>{
                         if !active(&s,&a).await {let _=send(&mut socket,serde_json::json!({"type":"unauthorized"})).await;break;}
                         match serde_json::from_str::<Incoming>(&text) {
-                            Ok(Incoming::Typing{active})=>{if last_typing.elapsed()>=Duration::from_millis(300) || !active {last_typing=Instant::now();let _=s.chat_events.send(Event{chat_id:id,payload:serde_json::json!({"type":"typing","is_admin":a.is_admin,"active":active})});}},
+                            Ok(Incoming::Typing{active})=>{if last_typing.elapsed()>=Duration::from_millis(300) || !active {last_typing=Instant::now();let _=s.chat_events.send(Event{customer_id,chat_id:id,payload:serde_json::json!({"type":"typing","is_admin":a.is_admin,"active":active})});}},
                             Ok(Incoming::Message{client_id,body})=>{
                                 if client_id.is_empty() || client_id.len()>80 || !client_id.bytes().all(|c|c.is_ascii_alphanumeric() || c==b'-') || body.trim().is_empty() || body.chars().count()>4000 || last_message.elapsed()<Duration::from_millis(150) {
                                     let _=send(&mut socket,serde_json::json!({"type":"error","client_id":client_id,"message":"Сообщение не отправлено: проверьте длину (1–4000 символов) или повторите через секунду."})).await;continue;
                                 }
                                 last_message=Instant::now();
                                 match save(&s,&a,id,client_id.clone(),body.trim().to_owned()).await {
-                                    Ok(message)=>{let _=send(&mut socket,serde_json::json!({"type":"message","message":message})).await;let _=s.chat_events.send(Event{chat_id:id,payload:serde_json::json!({"type":"message","message":message})});let _=s.chat_events.send(Event{chat_id:id,payload:serde_json::json!({"type":"typing","is_admin":a.is_admin,"active":false})});},
+                                    Ok(message)=>{let _=send(&mut socket,serde_json::json!({"type":"message","message":message})).await;let _=s.chat_events.send(Event{customer_id,chat_id:id,payload:serde_json::json!({"type":"message","message":message})});let _=s.chat_events.send(Event{customer_id,chat_id:id,payload:serde_json::json!({"type":"typing","is_admin":a.is_admin,"active":false})});},
                                     Err(_)=>{let _=send(&mut socket,serde_json::json!({"type":"error","client_id":client_id,"message":"Не удалось сохранить сообщение. Попробуйте снова."})).await;}
                                 }
                             },
@@ -378,6 +387,7 @@ async fn connection(mut socket: WebSocket, s: AppState, a: Actor, id: i64) {
         }
     }
     let _ = s.chat_events.send(Event {
+        customer_id,
         chat_id: id,
         payload: serde_json::json!({"type":"typing","is_admin":a.is_admin,"active":false}),
     });
@@ -387,6 +397,7 @@ async fn connection(mut socket: WebSocket, s: AppState, a: Actor, id: i64) {
 #[derive(Deserialize)]
 struct EventsQuery {
     after: Option<i64>,
+    request_after: Option<i64>,
 }
 async fn admin_events(
     State(s): State<AppState>,
@@ -417,7 +428,7 @@ async fn events_upgrade(
     let a = actor(&s, &h, admin).await?;
     Ok(ws
         .max_message_size(1024)
-        .on_upgrade(move |socket| notifications(socket, s, a, q.after)))
+        .on_upgrade(move |socket| notifications(socket, s, a, q.after, q.request_after)))
 }
 async fn notification(
     s: &AppState,
@@ -436,7 +447,13 @@ async fn notification(
     .map_err(internal)?;
     Ok(serde_json::json!({"type":"notification","message":message,"chat":chat}))
 }
-async fn notifications(mut socket: WebSocket, s: AppState, a: Actor, after: Option<i64>) {
+async fn notifications(
+    mut socket: WebSocket,
+    s: AppState,
+    a: Actor,
+    after: Option<i64>,
+    request_after: Option<i64>,
+) {
     let gauge = s.monitoring.websockets.with_label_values(&[
         "notifications",
         if a.is_admin { "admin" } else { "customer" },
@@ -444,6 +461,13 @@ async fn notifications(mut socket: WebSocket, s: AppState, a: Actor, after: Opti
     gauge.inc();
     let _connection = crate::monitoring::Inflight(gauge);
     let mut events = s.chat_events.subscribe();
+    let mut requests = s.request_events.subscribe();
+    let mut updates = s.chat_updates.subscribe();
+    let mut request_cursor = request_after;
+    if !request_catchup(&mut socket, &s, &a, &mut request_cursor).await {
+        return;
+    }
+
     // Initial connection establishes a baseline; reconnect catches messages missed offline.
     let latest: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(id),0) FROM chat_messages WHERE is_admin != $1 AND chat_id IN (SELECT id FROM chats WHERE $1 OR customer_id=$2)")
         .bind(a.is_admin)
@@ -472,17 +496,31 @@ async fn notifications(mut socket: WebSocket, s: AppState, a: Actor, after: Opti
     let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
     loop {
         tokio::select! {
+            event=requests.recv()=>match event {
+                Ok(customer) if a.is_admin || a.customer_id==Some(customer)=>{
+                    if !active(&s,&a).await || !request_catchup(&mut socket,&s,&a,&mut request_cursor).await {break;}
+                },
+                Ok(_)=>{}, Err(_)=>break
+            },
+            event=updates.recv()=>match event {
+                Ok(customer) if a.is_admin || a.customer_id==Some(customer)=>{
+                    if !active(&s,&a).await || !send(&mut socket,serde_json::json!({"type":"chats_changed"})).await {break;}
+                },
+                Ok(_)=>{}, Err(_)=>break
+            },
+
             _=heartbeat.tick()=>{
                 if !active(&s,&a).await {let _=send(&mut socket,serde_json::json!({"type":"unauthorized"})).await;break;}
                 if socket.send(Message::Ping(Vec::new().into())).await.is_err(){break;}
             }
             event=events.recv()=>match event {
                 Ok(event)=>{
+                    if !a.is_admin && a.customer_id != Some(event.customer_id) {continue;}
                     if event.payload.get("type").and_then(|v|v.as_str())!=Some("message"){continue;}
                     if !active(&s,&a).await{break;}
                     if let Some(value)=event.payload.get("message") {
                         if let Ok(message)=serde_json::from_value::<ChatMessage>(value.clone()){
-                            if message.is_admin != a.is_admin {if let Ok(payload)=notification(&s,&a,&message).await {if !send(&mut socket,payload).await {break;}}}
+                            if message.is_admin != a.is_admin {if let Ok(payload)=notification(&s,&a,&message).await {if !send(&mut socket,payload).await {break;}}} else if !send(&mut socket,serde_json::json!({"type":"chats_changed"})).await {break;}
                         }
                     }
                 }
@@ -534,5 +572,30 @@ async fn mark_read(
     // Only acknowledge messages actually delivered to this side, never future IDs.
     sqlx::query(&format!("UPDATE chats SET {column}=GREATEST({column},COALESCE((SELECT MAX(id) FROM chat_messages WHERE chat_id=$1 AND id<=$2 AND is_admin!=$3),0)) WHERE id=$1"))
         .bind(id).bind(input.through).bind(admin).execute(&s.db).await.map_err(internal)?;
+    let customer: i64 = sqlx::query_scalar("SELECT customer_id FROM chats WHERE id=$1")
+        .bind(id)
+        .fetch_one(&s.db)
+        .await
+        .map_err(internal)?;
+    let _ = s.chat_updates.send(customer);
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn request_catchup(
+    socket: &mut WebSocket,
+    s: &AppState,
+    a: &Actor,
+    cursor: &mut Option<i64>,
+) -> bool {
+    loop {
+        let Ok(batch) = crate::requests::events_for_actor(s, a, *cursor).await else {
+            return false;
+        };
+        let more = batch.events.len() == 100;
+        *cursor = Some(batch.cursor);
+        if !send(socket,serde_json::json!({"type":"request_events","cursor":batch.cursor,"events":batch.events})).await {return false;}
+        if !more {
+            return true;
+        }
+    }
 }
