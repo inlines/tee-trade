@@ -11,7 +11,7 @@ import { CustomerService } from './customer.service';
     @else if (auth.session(); as session) {
       <p class="eyebrow">ВАШ АККАУНТ</p><h1>{{ session.username }}</h1>
       <p>Вы вошли в аккаунт.</p>
-      <a class="button dark" [routerLink]="returnPath">{{ returnPath === '/catalog' ? 'Перейти в каталог' : 'Вернуться к товару' }}</a>
+      @if (returnPath !== '/catalog') { <a class="button dark" [routerLink]="returnPath">Вернуться к товару</a> }
       <button class="text-link account-logout" (click)="logout()" [disabled]="busy()">Выйти</button>
       <app-request-list />
     } @else {
