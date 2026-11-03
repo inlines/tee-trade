@@ -40,6 +40,8 @@ export class ChatNotifications implements OnInit,OnDestroy {
       if(data.type==='notification'){
         void this.chats.refresh(this.adminSide());const notice:Notice=data;this.cursor=Math.max(this.cursor??0,notice.message.id);
         if(this.seen.has(notice.message.id))return;this.seen.add(notice.message.id);if(this.seen.size>500)this.seen.delete(this.seen.values().next().value!);
+        const selected=this.chats.selected();
+        if(selected?.chat.id===notice.chat.id && selected.admin===this.adminSide())return;
         this.notices.update(items=>[...items.slice(-2),notice]);void this.sound.play();
         setTimeout(()=>{const layer=this.noticeLayer?.nativeElement;if(!this.destroyed&&this.notices().length&&layer?.showPopover&&!layer.matches(':popover-open'))layer.showPopover();},0);
         this.noticeTimers.set(notice.message.id,setTimeout(()=>this.dismiss(notice.message.id),15000));
