@@ -1,0 +1,1550 @@
+{
+  "uid": "tee-trade-business",
+  "title": "Tee Trade — бизнес и конверсии",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "timezone": "browser",
+  "tags": [
+    "tee-trade"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "window",
+        "label": "Окно показателей",
+        "type": "custom",
+        "query": "24h,7d,30d,90d",
+        "current": {
+          "text": "7d",
+          "value": "7d"
+        },
+        "options": [
+          {
+            "text": "24h",
+            "value": "24h",
+            "selected": false
+          },
+          {
+            "text": "7d",
+            "value": "7d",
+            "selected": true
+          },
+          {
+            "text": "30d",
+            "value": "30d",
+            "selected": false
+          },
+          {
+            "text": "90d",
+            "value": "90d",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Как читать дашборд",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Карточки показывают скользящее окно $window на текущий момент**, независимо от диапазона графиков в правом верхнем углу. Обновление данных — раз в минуту. Просмотр = открытие карточки; повторы одного посетителя и товара в одном 30-минутном интервале исключаются. Просмотры администратора и демотоваров из интерфейса не отправляются. Анонимные посетители определяются cookie, не являются точным числом людей."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Сбор бизнес-данных",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_business_collection_success",
+          "legendFormat": "Сбор бизнес-данных",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "НЕДОСТУПНО",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "OK",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Возраст снимка",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time()-tee_business_last_success_timestamp_seconds",
+          "legendFormat": "Возраст снимка",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 180
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Просмотры собираются с",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_views_start_timestamp_seconds*1000",
+          "legendFormat": "Просмотры собираются с",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 28,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Регистрации",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"registrations\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Регистрации",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Просмотры карточек",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"views\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Просмотры карточек",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Посетители карточек",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"viewers\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Посетители карточек",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Новые заявки",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 8,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"requests\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Новые заявки",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Сообщения покупателей",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"buyer_messages\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Сообщения покупателей",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Сообщения продавца",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 12,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"admin_messages\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Сообщения продавца",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Активные чаты",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"active_chats\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Активные чаты",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Завершённые заявки",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 12,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"completed_requests\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Завершённые заявки",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Просмотр → заявка",
+      "description": "Конверсия в течение 7 дней. Для просмотров/сообщений единица — пара покупатель+товар; регистрация — покупатель. При пустой когорте нет данных. Недавние когорты ещё не успели завершить 7 дней.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(tee_business_funnel{window=\"$window\",stage=\"view_to_request\"})/(sum(tee_business_funnel{window=\"$window\",stage=\"view_pairs\"})>0) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Просмотр → заявка",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Первое сообщение → заявка",
+      "description": "Конверсия в течение 7 дней. Для просмотров/сообщений единица — пара покупатель+товар; регистрация — покупатель. При пустой когорте нет данных. Недавние когорты ещё не успели завершить 7 дней.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 16,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(tee_business_funnel{window=\"$window\",stage=\"message_to_request\"})/(sum(tee_business_funnel{window=\"$window\",stage=\"message_pairs\"})>0) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Первое сообщение → заявка",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Просмотр → сообщение",
+      "description": "Конверсия в течение 7 дней. Для просмотров/сообщений единица — пара покупатель+товар; регистрация — покупатель. При пустой когорте нет данных. Недавние когорты ещё не успели завершить 7 дней.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(tee_business_funnel{window=\"$window\",stage=\"view_to_chat\"})/(sum(tee_business_funnel{window=\"$window\",stage=\"view_pairs\"})>0) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Просмотр → сообщение",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Регистрация → заявка",
+      "description": "Конверсия в течение 7 дней. Для просмотров/сообщений единица — пара покупатель+товар; регистрация — покупатель. При пустой когорте нет данных. Недавние когорты ещё не успели завершить 7 дней.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 16,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(tee_business_funnel{window=\"$window\",stage=\"registration_to_request\"})/(sum(tee_business_funnel{window=\"$window\",stage=\"registered_customers\"})>0) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Регистрация → заявка",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Воронка авторизованных просмотров",
+      "description": "Сообщение не обязательно предшествует заявке; две независимые ветки после просмотра.",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_funnel{window=\"$window\",stage=\"view_pairs\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Покупатель + товар",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "expr": "sum(tee_business_funnel{window=\"$window\",stage=\"view_to_chat\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Написали после просмотра",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "C",
+          "expr": "sum(tee_business_funnel{window=\"$window\",stage=\"view_to_request\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Оставили заявку после просмотра",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 18,
+      "title": "Воронка первых сообщений",
+      "description": "",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_funnel{window=\"$window\",stage=\"message_pairs\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Начали переписку",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "expr": "sum(tee_business_funnel{window=\"$window\",stage=\"message_to_request\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Оставили заявку после первого сообщения",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 19,
+      "title": "Заявки сейчас — по статусу",
+      "description": "Все заявки, независимо от выбранного окна.",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_requests_current{status=\"new\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Новые",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "expr": "sum(tee_requests_current{status=\"in_progress\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "В работе",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "C",
+          "expr": "sum(tee_requests_current{status=\"completed\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Архив",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 20,
+      "title": "Самая старая новая заявка",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_oldest_new_request_seconds and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Самая старая новая заявка",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Просмотры за скользящее окно",
+      "description": "",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"views_authenticated\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Авторизованные",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"views_anonymous\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Анонимные",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "Регистрации и заявки за скользящее окно",
+      "description": "",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"registrations\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Регистрации",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"requests\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Заявки",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"request_customers\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Покупатели с заявками",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Сообщения за скользящее окно",
+      "description": "",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"buyer_messages\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Покупатели",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(tee_business_events{window=\"$window\",event=\"admin_messages\"}) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Продавец",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "Конверсия переписок в заявки, %",
+      "description": "",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(tee_business_funnel{window=\"$window\",stage=\"message_to_request\"})/(sum(tee_business_funnel{window=\"$window\",stage=\"message_pairs\"})>0) and on() (tee_business_collection_success == 1) and on() ((time()-tee_business_last_success_timestamp_seconds)<180)",
+          "legendFormat": "Конверсия переписок в заявки, %",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "type": "text",
+      "title": "Как читать дашборд",
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Методика:** просмотр → заявка: авторизованные пары покупатель+товар с первым просмотром в выбранном окне и заявкой после него в пределах 7 дней. Первое сообщение → заявка: пары с первым сообщением покупателя в окне, затем заявка в течение 7 дней. Регистрация → заявка: новые аккаунты с заявкой в течение 7 дней. Конверсии отражают последовательность событий, а не причинность. Анонимные просмотры не связываются задним числом с аккаунтом. Просмотры до внедрения не восстанавливаются; регистрации, заявки и сообщения доступны по сохранённым записям. Персональные данные не передаются в Prometheus."
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "API",
+      "url": "/d/tee-trade-api",
+      "type": "link"
+    },
+    {
+      "title": "PostgreSQL",
+      "url": "/d/tee-trade-postgres",
+      "type": "link"
+    },
+    {
+      "title": "Бизнес",
+      "url": "/d/tee-trade-business",
+      "type": "link"
+    }
+  ]
+}

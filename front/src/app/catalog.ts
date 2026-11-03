@@ -26,6 +26,7 @@ export function loadState<T>(request: Observable<T>): Observable<LoadState<T>> {
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
+  recordView(id:number) { this.http.post('/api/auth/product-views/'+id,{}).subscribe({error:()=>{}}); }
   list(category = '') { return this.http.get<Product[]>('/api/products', { params: category ? { category } : {} }); }
   storefront() { return this.http.get<Storefront>('/api/storefront'); }
   product(id: string) { return this.http.get<Product>(`/api/products/${encodeURIComponent(id)}`); }

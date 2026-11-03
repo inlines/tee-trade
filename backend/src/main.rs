@@ -1,6 +1,7 @@
 mod admin;
 mod chat;
 mod customers;
+mod monitoring;
 mod requests;
 use axum::{
     Json, Router,
@@ -21,6 +22,7 @@ struct AppState {
     cache: redis::Client,
     registry: Registry,
     requests: IntCounterVec,
+    monitoring: monitoring::Metrics,
     admin_origin: String,
     secure_cookie: bool,
     chat_events: tokio::sync::broadcast::Sender<chat::Event>,
@@ -76,13 +78,24 @@ async fn products(
         query.category.as_deref().unwrap_or("all")
     );
     let mut cache = state.cache.get_multiplexed_async_connection().await.ok();
+    let mut cache_result = "error";
     if let Some(connection) = cache.as_mut() {
-        if let Ok(Some(value)) = connection.get::<_, Option<String>>(&key).await {
-            if let Ok(products) = serde_json::from_str(&value) {
-                return Ok(Json(products));
+        match connection.get::<_, Option<String>>(&key).await {
+            Ok(Some(value)) => {
+                if let Ok(products) = serde_json::from_str(&value) {
+                    state.monitoring.cache.with_label_values(&["hit"]).inc();
+                    return Ok(Json(products));
+                }
             }
+            Ok(None) => cache_result = "miss",
+            Err(_) => {}
         }
     }
+    state
+        .monitoring
+        .cache
+        .with_label_values(&[cache_result])
+        .inc();
     let products = sqlx::query_as::<_, Product>(&format!(
         "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) ORDER BY id"
     )).bind(query.category).fetch_all(&state.db).await.map_err(internal)?;
@@ -136,7 +149,25 @@ async fn count(State(state): State<AppState>, request: Request, next: Next) -> R
         .map(|p| p.as_str())
         .unwrap_or("unmatched")
         .to_owned();
+    let method = match request.method().as_str() {
+        "GET" => "GET",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "PATCH" => "PATCH",
+        "DELETE" => "DELETE",
+        "HEAD" => "HEAD",
+        "OPTIONS" => "OPTIONS",
+        _ => "OTHER",
+    };
+    let started = std::time::Instant::now();
+    state.monitoring.inflight.inc();
+    let _inflight = monitoring::Inflight(state.monitoring.inflight.clone());
     let response = next.run(request).await;
+    state
+        .monitoring
+        .duration
+        .with_label_values(&[path.as_str(), method, response.status().as_str()])
+        .observe(started.elapsed().as_secs_f64());
     state
         .requests
         .with_label_values(&[path.as_str(), response.status().as_str()])
@@ -157,7 +188,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &["route", "status"],
     )?;
     registry.register(Box::new(requests.clone()))?;
+    let monitoring = monitoring::Metrics::new(&registry)?;
     let state = AppState {
+        monitoring,
         chat_events: tokio::sync::broadcast::channel(1024).0,
         db,
         cache: redis::Client::open(std::env::var("REDIS_URL")?)?,
@@ -167,11 +200,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| "http://localhost:4200".into()),
         secure_cookie: std::env::var("COOKIE_SECURE").is_ok_and(|value| value == "true"),
     };
+    state.monitoring.start(state.clone());
     let app = Router::new()
         .merge(admin::routes(state.clone()))
         .merge(customers::routes())
         .merge(chat::routes())
         .merge(requests::routes())
+        .route(
+            "/api/auth/product-views/{id}",
+            axum::routing::post(monitoring::view),
+        )
         .route("/api/storefront", get(admin::storefront))
         .route("/api/media/{id}", get(admin::media))
         .route("/api/products", get(products))

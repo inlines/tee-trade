@@ -313,6 +313,12 @@ async fn save(
     Ok(message)
 }
 async fn connection(mut socket: WebSocket, s: AppState, a: Actor, id: i64) {
+    let gauge = s
+        .monitoring
+        .websockets
+        .with_label_values(&["chat", if a.is_admin { "admin" } else { "customer" }]);
+    gauge.inc();
+    let _connection = crate::monitoring::Inflight(gauge);
     let mut events = s.chat_events.subscribe();
     match history(&s, id, None).await {
         Ok(h) => {
@@ -431,6 +437,12 @@ async fn notification(
     Ok(serde_json::json!({"type":"notification","message":message,"chat":chat}))
 }
 async fn notifications(mut socket: WebSocket, s: AppState, a: Actor, after: Option<i64>) {
+    let gauge = s.monitoring.websockets.with_label_values(&[
+        "notifications",
+        if a.is_admin { "admin" } else { "customer" },
+    ]);
+    gauge.inc();
+    let _connection = crate::monitoring::Inflight(gauge);
     let mut events = s.chat_events.subscribe();
     // Initial connection establishes a baseline; reconnect catches messages missed offline.
     let latest: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(id),0) FROM chat_messages WHERE is_admin != $1 AND chat_id IN (SELECT id FROM chats WHERE $1 OR customer_id=$2)")

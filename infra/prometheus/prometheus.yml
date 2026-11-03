@@ -4,3 +4,6 @@ scrape_configs:
   - job_name: tee-trade-api
     static_configs:
       - targets: ["backend:8080"]
+  - job_name: tee-trade-postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

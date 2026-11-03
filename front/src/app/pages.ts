@@ -1,6 +1,6 @@
 import { RequestsService } from './requests.service';
 import { RequestDialog } from './request-dialog';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, effect } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -121,6 +121,14 @@ export class CatalogPage {
   }`,
 })
 export class ProductPage {
+  private trackedProduct:number|null=null;
+  constructor(){effect(()=>{
+    const product=this.state()?.data;
+    if(!product||product.is_demo||this.trackedProduct===product.id)return;
+    this.trackedProduct=product.id;
+    void this.admin.restore().then(()=>{if(!this.admin.session())this.api.recordView(product.id);}).catch(()=>{});
+  });}
+
   readonly requestOpen=inject(RequestsService).formOpen;
   readonly admin = inject(AdminService);
   readonly chats = inject(ChatService);

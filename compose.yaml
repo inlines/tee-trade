@@ -51,6 +51,17 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.18.1
+    environment:
+      DATA_SOURCE_URI: postgres:5432/${POSTGRES_DB:-tee_trade}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER:-tee_trade}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?Copy .env.example to .env}
+    command: ["--collector.postmaster", "--collector.database_wraparound"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
   prometheus:
     image: prom/prometheus:v3.5.0
     volumes:
