@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
   grafana:
     image: grafana/grafana:12.1.0
-    ports: ["127.0.0.1:3000:3000"]
+    ports: ["0.0.0.0:3000:3000"]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Copy .env.example to .env}
       GF_USERS_ALLOW_SIGN_UP: "false"

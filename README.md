@@ -35,6 +35,18 @@ docker compose up --build -d
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000 — пользователь `admin`, пароль из `.env`.
 
+Grafana также доступна из интернета по `http://<IP-сервера>:3000`.
+Порт TCP 3000 должен быть разрешён в сетевом экране провайдера VPS.
+Вход: `admin`, пароль — `GRAFANA_ADMIN_PASSWORD` из серверного `.env`,
+заданный при первом запуске Grafana. Авторизация обязательна, регистрация отключена.
+До настройки HTTPS соединение использует незашифрованный HTTP.
+Чтобы применить изменение публикации порта без пересборки приложения:
+
+```bash
+git pull --ff-only origin main
+docker compose up -d --no-deps grafana
+```
+
 В Grafana автоматически создаются источник Prometheus и дашборд Tee Trade API.
 Счётчик `http_requests_total` содержит метки route и status.
 Миграции выполняются при старте backend и добавляют демонстрационные товары.
