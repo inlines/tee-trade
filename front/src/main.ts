@@ -1,3 +1,4 @@
+import { RequestsService } from './app/requests.service';
 import { ChatToasts } from './app/chat-toasts';
 import { Component, inject } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
@@ -33,13 +34,14 @@ const routes: Routes = [
     </div></header>
     <main id="main" tabindex="-1"><router-outlet /></main>
     <footer><a class="wordmark" routerLink="/">TEE TRADE<span>®</span></a><nav aria-label="Меню в подвале"><a routerLink="/catalog">Каталог</a><a routerLink="/about">О нас</a></nav><span>© 2026 Tee Trade</span></footer>
-    @if(!chat.drawer() && !chat.selected()){<app-chat-toasts />}
+    @if(!chat.drawer() && !chat.selected() && !requests.formOpen()){<app-chat-toasts />}
     @if(chat.drawer() && (admin.session() || customer.session())){<app-chat-sidebar [admin]="!!admin.session()" />}
     @for (selected of chat.active(); track selected.chat.id + ':' + selected.admin) { <app-chat-dialog [chat]="selected.chat" [admin]="selected.admin" /> }`,
 })
 class App {
   readonly sound = inject(NotificationSound);
   readonly chat = inject(ChatService);
+  readonly requests=inject(RequestsService);
   readonly admin = inject(AdminService);
   readonly customer = inject(CustomerService);
   constructor() { void this.admin.restore().catch(() => {}); void this.customer.restore().catch(() => {}); }

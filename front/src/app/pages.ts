@@ -1,3 +1,5 @@
+import { RequestsService } from './requests.service';
+import { RequestDialog } from './request-dialog';
 import { Component, computed, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
@@ -86,7 +88,7 @@ export class CatalogPage {
 }
 
 @Component({
-  selector: 'app-product', imports: [RouterLink, CurrencyPipe],
+  selector: 'app-product', imports: [RouterLink, CurrencyPipe, RequestDialog],
   template: `@if (state(); as state) {
     @if (state.loading) { <p class="status" role="status">Загружаем товар…</p> }
     @else if (state.notFound) { <div class="status"><p class="eyebrow">404</p><h1>Товар не найден</h1><a routerLink="/catalog" class="button dark">Вернуться в каталог</a></div> }
@@ -106,9 +108,11 @@ export class CatalogPage {
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
           @if (product.is_demo) { <p class="demo-note">Демонстрационный товар. В галерее — иллюстрации, включая шаблон ярлычка. Они не заменяют фотографии реальной вещи.</p> }
           @if (customer.session() && !admin.session()) { <button class="button dark" (click)="openChat(product.id)" [disabled]="openingChat()">{{ openingChat() ? 'Открываем чат…' : 'Написать' }}</button> }
+          @if (customer.session() && !admin.session()) { <button class="button" style="margin-left:12px" (click)="requestOpen.set(true)">Оставить заявку</button> }
+          @if (requestOpen() && customer.session() && !admin.session()) { <app-request-dialog [product]="product" (closed)="requestOpen.set(false)" /> }
           @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
           @if (customer.ready() && !customer.session() && !admin.session()) {
-            <p class="seller-contact">Чтобы написать продавцу, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
+            <p class="seller-contact">Чтобы написать продавцу или оставить заявку, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
           }
           <a class="text-link back-link" [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">← Назад в раздел</a>
         </div>
@@ -117,6 +121,7 @@ export class CatalogPage {
   }`,
 })
 export class ProductPage {
+  readonly requestOpen=inject(RequestsService).formOpen;
   readonly admin = inject(AdminService);
   readonly chats = inject(ChatService);
   readonly openingChat = signal(false);

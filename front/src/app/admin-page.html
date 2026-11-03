@@ -12,9 +12,10 @@
       <button class="button dark" type="submit" [disabled]="busy() || loginForm.invalid">{{ busy() ? 'Входим…' : 'Войти' }}</button>
     </form>
   } @else {
-    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="tab.set('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="tab.set('storefront')">Главная страница</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
+    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="selectTab('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="selectTab('storefront')">Главная страница</button><button [class.active]="tab() === 'requests'" (click)="tab.set('requests')">Заявки</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
     @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
     @if (notice()) { <p class="form-success" role="status">{{ notice() }}</p> }
+    @if (tab() === 'requests') { <app-request-list [admin]="true" /> }
     @if (tab() === 'products') {
       @if (!editor()) {
         <div class="admin-toolbar"><label>Поиск товара<input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label><button class="button dark" [disabled]="busy() || uploading()" (click)="startEdit()">Добавить товар +</button></div>
@@ -51,7 +52,7 @@
           <div class="save-row"><button class="button dark" type="submit" [disabled]="busy() || uploading() || productForm.invalid">{{ busy() ? 'Сохраняем…' : 'Сохранить товар' }}</button>@if (editId()) { <a class="text-link" [routerLink]="['/product', editId()]" target="_blank" rel="noopener">Посмотреть товар</a> }</div>
         </form>
       }
-    } @else if (settings(); as config) {
+    } @else if (tab() === 'storefront' && settings(); as config) {
       <form #settingsForm="ngForm" (ngSubmit)="saveSettings()">
         <fieldset [disabled]="busy()">
           <section class="settings-section"><label class="check-label"><input type="checkbox" name="carouselEnabled" [ngModel]="config.carousel_enabled" (ngModelChange)="patchSettings('carousel_enabled', $event)">Показывать верхнюю галерею</label><h2>Галерея товаров</h2><p>Слайды идут в указанном порядке. Используется выбранное в товаре фото для главной; если оно не задано — обложка каталога.</p>

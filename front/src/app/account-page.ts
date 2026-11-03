@@ -1,10 +1,11 @@
+import { RequestList } from './request-list';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { CustomerService } from './customer.service';
 @Component({
-  selector:'app-account', imports:[FormsModule, RouterLink],
+  selector:'app-account', imports:[FormsModule, RouterLink, RequestList],
   template:`<section class="account-panel">
     @if (!auth.ready()) { <p role="status">Проверяем вход…</p> }
     @else if (auth.session(); as session) {
@@ -12,6 +13,7 @@ import { CustomerService } from './customer.service';
       <p>Вы вошли в аккаунт.</p>
       <a class="button dark" [routerLink]="returnPath">{{ returnPath === '/catalog' ? 'Перейти в каталог' : 'Вернуться к товару' }}</a>
       <button class="text-link account-logout" (click)="logout()" [disabled]="busy()">Выйти</button>
+      <app-request-list />
     } @else {
       <p class="eyebrow">TEE TRADE / АККАУНТ</p>
       <h1>{{ mode() === 'register' ? 'Регистрация' : 'Вход' }}</h1>

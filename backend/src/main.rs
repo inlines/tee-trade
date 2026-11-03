@@ -1,6 +1,7 @@
 mod admin;
 mod chat;
 mod customers;
+mod requests;
 use axum::{
     Json, Router,
     extract::{Path, Query, Request, State},
@@ -170,6 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(admin::routes(state.clone()))
         .merge(customers::routes())
         .merge(chat::routes())
+        .merge(requests::routes())
         .route("/api/storefront", get(admin::storefront))
         .route("/api/media/{id}", get(admin::media))
         .route("/api/products", get(products))

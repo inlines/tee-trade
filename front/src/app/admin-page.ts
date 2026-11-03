@@ -1,3 +1,6 @@
+import { RequestList } from './request-list';
+import { effect } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Component, computed, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -8,7 +11,7 @@ import { ChatService } from './chat.service';
 import { Product, ProductImage, categories } from './catalog';
 
 @Component({
-  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe],
+  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList],
   templateUrl: './admin-page.html', styleUrl: './admin-page.css',
 })
 export class AdminPage {
@@ -24,7 +27,7 @@ export class AdminPage {
   readonly uploadProgress = signal('');
   readonly error = signal('');
   readonly notice = signal('');
-  readonly tab = signal<'products' | 'storefront'>('products');
+  readonly tab = signal<'products' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
   readonly search = signal('');
   readonly filtered = computed(() => this.products().filter(p => `${p.name} ${p.brand}`.toLowerCase().includes(this.search().toLowerCase())));
@@ -38,7 +41,12 @@ export class AdminPage {
   draft: ProductDraft = this.emptyDraft();
   carouselChoice = ''; featuredChoice = '';
 
-  constructor() { void this.initialize(); }
+  readonly queryParams=toSignal(this.route.queryParamMap);
+  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});void this.initialize(); }
+  selectTab(tab:'products'|'storefront') {
+    this.tab.set(tab);
+    void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
+  }
   private emptyDraft(): ProductDraft { return { name:'', category:'', brand:'', release_year:null, description:'', theme:'', price_cents:null, images:[], is_demo:false }; }
   private async initialize() {
     try { await this.api.restore(); if (this.api.session()) await this.load(); }

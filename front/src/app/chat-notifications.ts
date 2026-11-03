@@ -1,10 +1,12 @@
+import { RequestNotifications } from './request-notifications';
 import { Component, OnDestroy, OnInit, inject, input } from '@angular/core';
 import { ChatService } from './chat.service';
 import { AdminService } from './admin.service';
 import { CustomerService } from './customer.service';
 import { NotificationSound } from './notification-sound.service';
 import { ChatNotice, ChatToastStore } from './chat-toasts';
-@Component({selector:'app-chat-notifications',template:`
+@Component({selector:'app-chat-notifications',imports:[RequestNotifications],template:`
+  <app-request-notifications [admin]="adminSide()" />
   <button class="chat-bell" (click)="chats.drawer.set(true)" [attr.aria-label]="'Чаты, непрочитанных сообщений: '+chats.unread()" [attr.aria-expanded]="chats.drawer()" aria-haspopup="dialog">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M9 20a3 3 0 0 0 6 0"/></svg>
     @if(chats.unread()){<span class="bell-dot"></span><span class="bell-count">{{chats.unread()>99?'99+':chats.unread()}}</span>}
