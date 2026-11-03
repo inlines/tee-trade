@@ -39,6 +39,7 @@ struct Chat {
     username: String,
     updated_at: String,
     last_message: Option<String>,
+    last_message_at: Option<String>,
     product_exists: bool,
     unread_count: i64,
 }
@@ -48,7 +49,7 @@ struct Actor {
     hash: String,
     csrf: String,
 }
-const CHAT_SELECT: &str = "SELECT (SELECT COUNT(*) FROM chat_messages WHERE chat_id=c.id AND __UNREAD__) unread_count, c.id, c.product_id, c.product_name, u.username, c.updated_at::text, (SELECT body FROM chat_messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) last_message, EXISTS(SELECT 1 FROM products WHERE id=c.product_id) product_exists FROM chats c JOIN customers u ON u.id=c.customer_id";
+const CHAT_SELECT: &str = "SELECT (SELECT COUNT(*) FROM chat_messages WHERE chat_id=c.id AND __UNREAD__) unread_count, c.id, c.product_id, c.product_name, u.username, c.updated_at::text, (SELECT body FROM chat_messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) last_message, (SELECT created_at::text FROM chat_messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) last_message_at, EXISTS(SELECT 1 FROM products WHERE id=c.product_id) product_exists FROM chats c JOIN customers u ON u.id=c.customer_id";
 const MESSAGE_COLUMNS: &str = "id, chat_id, is_admin, client_id, body, created_at::text";
 
 fn chat_select(admin: bool) -> String {

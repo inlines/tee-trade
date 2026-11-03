@@ -32,6 +32,7 @@ try{
  await request(buyer,'/api/auth/chats','POST',{product_id:productId},403,{'X-CSRF-Token':''});
  const chat=await request(buyer,'/api/auth/chats','POST',{product_id:productId});
  assert.equal((await request(buyer,'/api/auth/chats','POST',{product_id:productId})).id,chat.id);
+ assert.equal(chat.last_message_at,null);
  const unread=async(actor,adminSide)=> (await request(actor,`/api/${adminSide?'admin':'auth'}/chats`)).find(c=>c.id===chat.id).unread_count;
  assert.equal(await unread(admin,true),0);assert.equal(await unread(buyer,false),0);
  await request(stranger,`/api/auth/chats/${chat.id}/read`,'POST',{through:999999999},404);
@@ -55,6 +56,7 @@ try{
  const outgoing={type:'message',client_id:randomUUID(),body:'Здравствуйте, какой размер?'};b.send(outgoing);
  const saved=(await b.wait(e=>e.type==='message')).message;
  assert.equal((await a.wait(e=>e.type==='message')).message.id,saved.id);
+ assert.equal((await request(admin,'/api/admin/chats')).find(c=>c.id===chat.id).last_message_at,saved.created_at);
  const notice=await notifications.wait(e=>e.type==='notification');assert.equal(notice.chat.id,chat.id);assert.equal(notice.message.id,saved.id);assert.equal(notice.chat.username,names[0]);
  const resumedNotifications=await connect(admin,chat.id,true,base,true,saved.id-1);assert.equal((await resumedNotifications.wait(e=>e.type==='notification')).message.id,saved.id);await resumedNotifications.wait(e=>e.type==='ready');resumedNotifications.ws.close();
  await pause();b.send(outgoing);assert.equal((await b.wait(e=>e.type==='message')).message.id,saved.id);

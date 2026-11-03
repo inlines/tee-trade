@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CustomerService } from './customer.service';
 import { AdminService } from './admin.service';
-export interface Chat { unread_count:number; id:number; product_id:number; product_name:string; username:string; updated_at:string; last_message:string|null; product_exists:boolean; }
+export interface Chat { unread_count:number; id:number; product_id:number; product_name:string; username:string; updated_at:string; last_message:string|null; last_message_at:string|null; product_exists:boolean; }
 export interface ChatMessage { id:number; chat_id:number; is_admin:boolean; client_id:string; body:string; created_at:string; }
 export interface History { messages:ChatMessage[]; has_more:boolean; }
 @Injectable({providedIn:'root'})

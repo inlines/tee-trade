@@ -1,3 +1,4 @@
+import { ChatToasts } from './chat-toasts';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
@@ -5,7 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Chat, ChatMessage, ChatService, History } from './chat.service';
 @Component({
-  selector:'app-chat-dialog',imports:[FormsModule,DatePipe,RouterLink],
+  selector:'app-chat-dialog',imports:[FormsModule,DatePipe,RouterLink,ChatToasts],
   template:`<dialog #dialog aria-labelledby="chat-title" (cancel)="close($event)" (click)="backdrop($event)">
     <div class="chat-shell">
       <header><div><p>{{ admin() ? chat().username : 'Чат с продавцом' }}</p><h2 id="chat-title">{{ chat().product_name || 'Без названия' }} <small>№{{ chat().product_id }}</small></h2></div><button class="chat-close" aria-label="Закрыть чат" (click)="close()">×</button></header>
@@ -20,7 +21,7 @@ import { Chat, ChatMessage, ChatService, History } from './chat.service';
       @if (error()) { <p class="chat-error" role="alert">{{ error() }}</p> }
       <form (ngSubmit)="send()"><label class="sr-label" for="chat-body">Сообщение</label><textarea id="chat-body" name="body" [(ngModel)]="draft" (input)="onTyping()" (keydown)="onKey($event)" maxlength="4000" rows="3" placeholder="Напишите сообщение…" [disabled]="pending()"></textarea><div class="chat-send"><span>Enter — отправить · Shift+Enter — новая строка</span><button class="button dark" type="submit" [disabled]="!connected() || pending() || !draft.trim()">{{ pending() ? 'Отправляем…' : 'Отправить' }}</button></div></form>
     </div>
-  </dialog>`,
+  <app-chat-toasts /></dialog>`,
   styles:[`
     dialog{width:min(680px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:0;border:1px solid var(--line);color:var(--ink);background:var(--paper)}dialog::backdrop{background:#20251f80}.chat-shell{display:flex;flex-direction:column;height:min(760px,calc(100dvh - 28px))}
     header{display:flex;justify-content:space-between;gap:16px;padding:22px 24px;border-bottom:1px solid var(--line)}header p{font-size:12px;color:var(--muted)}h2{font-size:22px;margin-top:6px;overflow-wrap:anywhere}small{font-size:12px;letter-spacing:0;font-weight:normal;white-space:nowrap}.chat-close{background:none;border:0;font-size:30px;align-self:flex-start;padding:0 6px;color:var(--ink)}
