@@ -2,10 +2,9 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChatList } from './chat-list';
 import { CustomerService } from './customer.service';
 @Component({
-  selector:'app-account', imports:[FormsModule, RouterLink, ChatList],
+  selector:'app-account', imports:[FormsModule, RouterLink],
   template:`<section class="account-panel">
     @if (!auth.ready()) { <p role="status">Проверяем вход…</p> }
     @else if (auth.session(); as session) {
@@ -33,7 +32,6 @@ import { CustomerService } from './customer.service';
         </fieldset>
       </form>
     }
-    @if (auth.session()) { <app-chat-list /> }
     @if (error()) { <p class="account-error" role="alert">{{ error() }}</p> }
   </section>`,
   styles:[`

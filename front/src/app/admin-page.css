@@ -79,3 +79,9 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
 .account { flex-wrap:wrap; min-width:0; overflow-wrap:anywhere; }
 .selected-products li>span { min-width:0; overflow-wrap:anywhere; }
 .admin-product h3,.admin-product p { overflow-wrap:anywhere; }
+.photo-dropzone { display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px 20px;margin-bottom:24px;border:2px dashed #a4ad98;background:#f0f0e9;text-align:center;transition:background .15s,border-color .15s; }
+.photo-dropzone.dragging {background:#e0e8cc;border-color:var(--ink)} .photo-dropzone.disabled {opacity:.55}.drop-symbol {font-size:32px;color:var(--olive)}
+.photo-dropzone p {font-size:13px;color:var(--muted)} .photo-picker {position:relative;overflow:hidden;margin:4px 0 0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:48px}
+.photo-picker input {position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0}.photo-picker:focus-within {outline:2px solid var(--olive);outline-offset:4px}
+.mobile-upload {display:none}.photo-roles {display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.photo-roles button {padding:10px;border:1px solid #a4ad98;background:var(--paper);font-size:12px;color:var(--ink)}.photo-roles button.selected {background:var(--ink);color:var(--paper)}
+@media(pointer:coarse),(max-width:700px){.desktop-upload,.drop-symbol{display:none}.mobile-upload{display:block}.photo-dropzone{border:1px solid var(--line);padding:20px 14px}.photo-picker{width:100%}}

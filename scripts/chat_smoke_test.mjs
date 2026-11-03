@@ -32,6 +32,12 @@ try{
  await request(buyer,'/api/auth/chats','POST',{product_id:productId},403,{'X-CSRF-Token':''});
  const chat=await request(buyer,'/api/auth/chats','POST',{product_id:productId});
  assert.equal((await request(buyer,'/api/auth/chats','POST',{product_id:productId})).id,chat.id);
+ const unread=async(actor,adminSide)=> (await request(actor,`/api/${adminSide?'admin':'auth'}/chats`)).find(c=>c.id===chat.id).unread_count;
+ assert.equal(await unread(admin,true),0);assert.equal(await unread(buyer,false),0);
+ await request(stranger,`/api/auth/chats/${chat.id}/read`,'POST',{through:999999999},404);
+ await request(buyer,`/api/auth/chats/${chat.id}/read`,'POST',{through:999999999},403,{'X-CSRF-Token':''});
+ await request(buyer,`/api/auth/chats/${chat.id}/read`,'POST',{through:999999999},204);
+ await request(admin,`/api/admin/chats/${chat.id}/read`,'POST',{through:999999999},204);
  await request(stranger,`/api/auth/chats/${chat.id}/messages`,'GET',undefined,404);
  await request(buyer,'/api/admin/chats','GET',undefined,401);
  await assert.rejects(()=>connect(stranger,chat.id));
@@ -53,10 +59,17 @@ try{
  const resumedNotifications=await connect(admin,chat.id,true,base,true,saved.id-1);assert.equal((await resumedNotifications.wait(e=>e.type==='notification')).message.id,saved.id);await resumedNotifications.wait(e=>e.type==='ready');resumedNotifications.ws.close();
  await pause();b.send(outgoing);assert.equal((await b.wait(e=>e.type==='message')).message.id,saved.id);
  assert.equal((await request(buyer,`/api/auth/chats/${chat.id}/messages`)).messages.length,1);
+ assert.equal(await unread(admin,true),1);assert.equal(await unread(buyer,false),0);
+ await request(admin,`/api/admin/chats/${chat.id}/read`,'POST',{through:saved.id},204);
+ await request(admin,`/api/admin/chats/${chat.id}/read`,'POST',{through:0},204);
+ assert.equal(await unread(admin,true),0);
  a.send({type:'typing',active:true});assert.equal((await b.wait(e=>e.type==='typing'&&e.is_admin&&e.active)).active,true);
  a.send({type:'message',client_id:randomUUID(),body:'Здравствуйте! Размер L.'});
  assert.equal((await b.wait(e=>e.type==='message'&&e.message.is_admin)).message.body,'Здравствуйте! Размер L.');
  const reply=(await a.wait(e=>e.type==='message'&&e.message.is_admin)).message;
+ assert.equal(await unread(buyer,false),1);assert.equal(await unread(admin,true),0);
+ await request(buyer,`/api/auth/chats/${chat.id}/read`,'POST',{through:reply.id},204);
+ assert.equal(await unread(buyer,false),0);
  const buyerNotice=await buyerEvents.wait(e=>e.type==='notification');assert.equal(buyerNotice.chat.id,chat.id);assert.equal(buyerNotice.message.id,reply.id);
  const buyerReplay=await connect(buyer,chat.id,false,base,true,reply.id-1);assert.equal((await buyerReplay.wait(e=>e.type==='notification')).message.id,reply.id);await buyerReplay.wait(e=>e.type==='ready');buyerReplay.ws.close();
  const strangerReplay=await connect(stranger,chat.id,false,base,true,0);assert.equal((await strangerReplay.wait(e=>e.type==='ready')).cursor,0);
@@ -78,7 +91,7 @@ try{
  assert.equal((await request(buyer,`/api/auth/chats/${chat.id}/messages`)).messages.length,100);
  await request(buyer,'/api/auth/logout','POST',{},204);
  reopened.send({type:'typing',active:true});await reopened.wait(e=>e.type==='unauthorized');
- console.log('PASS: admin and customer notifications, replay and isolation, WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
+ console.log('PASS: persistent unread counts, read authorization and monotonic bounded cursors, admin and customer notifications, replay and isolation, WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
 }finally{
  for(const item of sockets)item.ws.close();
  if(productId)await request(admin,`/api/admin/products/${productId}`,'DELETE',undefined,204);

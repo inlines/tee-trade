@@ -10,7 +10,7 @@ import { Chat, ChatMessage, ChatService, History } from './chat.service';
     <div class="chat-shell">
       <header><div><p>{{ admin() ? chat().username : 'Чат с продавцом' }}</p><h2 id="chat-title">{{ chat().product_name || 'Без названия' }} <small>№{{ chat().product_id }}</small></h2></div><button class="chat-close" aria-label="Закрыть чат" (click)="close()">×</button></header>
       <div class="chat-status" role="status">{{ status() }} @if (!connected() && !pending()) { <button class="text-link" (click)="reconnect()">Повторить</button> } @if (chat().product_exists) { <a [routerLink]="['/product',chat().product_id]" (click)="close()">К товару</a> } @else { <span>Товар удалён</span> }</div>
-      <div class="chat-messages" #scrollArea role="log" aria-label="История переписки" aria-live="polite">
+      <div class="chat-messages" (scroll)="markVisibleRead()" #scrollArea role="log" aria-label="История переписки" aria-live="polite">
         @if (hasMore()) { <button class="text-link older" (click)="older()" [disabled]="loadingOlder()">{{ loadingOlder() ? 'Загружаем…' : 'Предыдущие сообщения' }}</button> }
         @for (message of messages();track message.id) {
           <article class="bubble" [class.mine]="message.is_admin === admin()"><span class="sender">{{ message.is_admin ? 'Продавец' : chat().username }}</span><p>{{ message.body }}</p><time [attr.datetime]="message.created_at">{{ date(message.created_at) | date:'dd.MM.yyyy HH:mm' }}</time></article>
@@ -99,8 +99,17 @@ export class ChatDialog implements AfterViewInit,OnDestroy {
     }
     if(!this.destroyed&&!this.unauthorized){this.status.set('Связь потеряна. Переподключаемся…');this.retryTimer=setTimeout(()=>this.connect(),2500);}
   }
+  private readThrough=0;private markingRead=false;
+  markVisibleRead(){
+    if(this.destroyed||document.hidden||this.markingRead)return;
+    const el=this.scrollArea?.nativeElement;if(!el||el.scrollHeight-el.scrollTop-el.clientHeight>100)return;
+    const through=this.messages().filter(message=>message.is_admin!==this.admin()).at(-1)?.id??0;
+    if(through<=this.readThrough)return;
+    this.markingRead=true;
+    void this.api.markRead(this.chat().id,this.admin(),through).then(()=>{this.readThrough=through;this.markingRead=false;this.markVisibleRead();}).catch(()=>{this.markingRead=false;});
+  }
   private merge(values:ChatMessage[]){this.messages.update(current=>Array.from(new Map([...current,...values].map(m=>[m.id,m])).values()).sort((a,b)=>a.id-b.id));}
-  private bottom(){setTimeout(()=>{if(!this.destroyed){const el=this.scrollArea.nativeElement;el.scrollTop=el.scrollHeight;}},0);}
+  private bottom(){setTimeout(()=>{if(!this.destroyed){const el=this.scrollArea.nativeElement;el.scrollTop=el.scrollHeight;this.markVisibleRead();}},0);}
   private ack(){this.outbound=null;this.pending.set(false);this.draft='';this.error.set('');clearTimeout(this.acknowledgementTimer);}
   private transmit(){if(this.outbound&&this.socket?.readyState===WebSocket.OPEN){this.socket.send(JSON.stringify(this.outbound));clearTimeout(this.acknowledgementTimer);this.acknowledgementTimer=setTimeout(()=>this.socket?.close(),10000);}}
   send(){if(!this.connected()||this.pending()||!this.draft.trim())return;this.error.set('');this.pending.set(true);this.outbound={type:'message',client_id:Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''),body:this.draft.trim()};this.transmit();this.typingEvent(false);}

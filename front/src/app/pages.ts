@@ -43,7 +43,7 @@ export class HomePage {
 
 @Component({
   selector: 'app-catalog', imports: [RouterLink, RouterLinkActive, ProductCard],
-  template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / КАТАЛОГ</p><h1>{{ title() }}</h1><p>Вещи, которые хочется рассмотреть ближе.</p></section>
+  template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / КАТАЛОГ</p><h1>{{ title() }}</h1></section>
     <nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
       @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>
     @if (!validCategory()) { <div class="status"><h2>Такой категории нет</h2><a routerLink="/catalog" class="text-link">Перейти ко всем вещам →</a></div> }

@@ -26,6 +26,8 @@ struct AppState {
 }
 #[derive(Serialize, Deserialize)]
 struct ProductImage {
+    #[serde(default)]
+    carousel: bool,
     url: String,
     alt: String,
     kind: String,

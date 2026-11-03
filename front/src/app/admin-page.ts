@@ -5,11 +5,10 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AdminService, ProductDraft, StorefrontSettings } from './admin.service';
 import { ChatService } from './chat.service';
-import { ChatList } from './chat-list';
 import { Product, ProductImage, categories } from './catalog';
 
 @Component({
-  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, ChatList],
+  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe],
   templateUrl: './admin-page.html', styleUrl: './admin-page.css',
 })
 export class AdminPage {
@@ -21,9 +20,11 @@ export class AdminPage {
   readonly checking = signal(true);
   readonly busy = signal(false);
   readonly uploading = signal(false);
+  readonly dragging = signal(false);
+  readonly uploadProgress = signal('');
   readonly error = signal('');
   readonly notice = signal('');
-  readonly tab = signal<'products' | 'storefront' | 'chats'>('products');
+  readonly tab = signal<'products' | 'storefront'>('products');
   readonly products = signal<Product[]>([]);
   readonly search = signal('');
   readonly filtered = computed(() => this.products().filter(p => `${p.name} ${p.brand}`.toLowerCase().includes(this.search().toLowerCase())));
@@ -49,7 +50,6 @@ export class AdminPage {
     this.products.set(products); this.settings.set(settings);
     const chatId = this.route.snapshot.queryParamMap.get('chat');
     if(chatId){
-      this.tab.set('chats');
       const chat=(await this.chatApi.list(true)).find(chat=>chat.id===Number(chatId));
       if(chat)this.chatApi.open(chat,true);else this.error.set('Чат не найден.');
     }
@@ -84,7 +84,7 @@ export class AdminPage {
     this.editId.set(product?.id ?? null);
     this.draft = product ? { ...product, images: [] } : this.emptyDraft();
     this.price = product?.price_cents == null ? null : product.price_cents / 100;
-    this.images.set(product ? product.images.map(image => ({ ...image })) : []);
+    this.images.set(this.normalizeImages(product ? product.images : []));
     this.editor.set(true); this.error.set(''); this.notice.set(''); this.dirtyProduct.set(false);
   }
   closeEditor() {
@@ -92,30 +92,43 @@ export class AdminPage {
     this.editor.set(false); this.dirtyProduct.set(false); this.error.set('');
     void this.router.navigate([], { relativeTo: this.route, queryParams: { edit: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
-  async upload(event: Event, kind: 'detail' | 'label') {
+  async upload(event: Event) {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []); input.value = '';
-    if (!files.length) return;
+    await this.uploadFiles(files);
+  }
+  dragOver(event: DragEvent) { event.preventDefault(); if(!this.busy()&&!this.uploading()) {this.dragging.set(true); if(event.dataTransfer)event.dataTransfer.dropEffect='copy';} }
+  dragLeave(event: DragEvent) { if(!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node|null))this.dragging.set(false); }
+  drop(event: DragEvent) { event.preventDefault(); this.dragging.set(false); void this.uploadFiles(Array.from(event.dataTransfer?.files??[])); }
+  private async uploadFiles(files: File[]) {
+    if (!files.length || this.busy() || this.uploading()) return;
     this.error.set('');
     if (this.images().length + files.length > 12) { this.error.set('Можно добавить не более 12 фотографий.'); return; }
     if (files.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg','image/png','image/webp'].includes(file.type))) { this.error.set('Выберите JPEG, PNG или WebP размером до 8 МБ.'); return; }
     this.uploading.set(true);
     try {
-      for (const file of files) {
+      for (const [index,file] of files.entries()) {
+        this.uploadProgress.set(`Загружаем фото ${index+1} из ${files.length}…`);
         const { url } = await this.api.upload(file);
-        const role = kind === 'label' ? 'label' : this.images().some(image => image.kind === 'front') ? 'detail' : 'front';
-        this.images.update(images => [...images, { url, kind: role, alt: `${this.draft.name || 'Товар'} — ${role === 'label' ? 'ярлычок' : role === 'front' ? 'основной вид' : 'детали'}` }]);
+        const role = this.images().some(image => image.kind === 'front') ? 'detail' : 'front';
+        this.images.update(images => this.normalizeImages([...images, { url, kind: role, alt: `${this.draft.name || 'Товар'} — фото ${this.images().length+1}` }]));
         this.dirtyProduct.set(true);
       }
     } catch (error) { this.handleError(error); }
-    finally { this.uploading.set(false); }
+    finally { this.uploading.set(false); this.uploadProgress.set(''); }
+  }
+  private normalizeImages(images: ProductImage[]): ProductImage[] {
+    const cover=Math.max(0,images.findIndex(image=>image.kind==='front'));
+    const carousel=images.findIndex(image=>image.carousel);
+    return images.map((image,i)=>({...image,kind:i===cover?'front':'detail',carousel:i===(carousel<0?cover:carousel)}));
   }
   changeRole(index: number, role: ProductImage['kind']) {
     this.images.update(images => images.map((image, i) => ({ ...image, kind: i === index ? role : role === 'front' && image.kind === 'front' ? 'detail' : image.kind })));
     this.dirtyProduct.set(true);
   }
+  setCarousel(index: number) { this.images.update(images=>images.map((image,i)=>({...image,carousel:i===index}))); this.dirtyProduct.set(true); }
   changeAlt(index: number, alt: string) { this.images.update(images => images.map((image, i) => i === index ? { ...image, alt } : image)); this.dirtyProduct.set(true); }
-  removeImage(index: number) { this.images.update(images => images.filter((_, i) => i !== index)); this.dirtyProduct.set(true); }
+  removeImage(index: number) { this.images.update(images => this.normalizeImages(images.filter((_, i) => i !== index))); this.dirtyProduct.set(true); }
   moveImage(index: number, direction: number) {
     this.images.update(images => { const result = [...images]; const target = index + direction; if (target >= 0 && target < result.length) [result[index], result[target]] = [result[target], result[index]]; return result; }); this.dirtyProduct.set(true);
   }

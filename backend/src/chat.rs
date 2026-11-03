@@ -12,7 +12,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     middleware,
     response::Response,
-    routing::get,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -40,6 +40,7 @@ struct Chat {
     updated_at: String,
     last_message: Option<String>,
     product_exists: bool,
+    unread_count: i64,
 }
 struct Actor {
     customer_id: Option<i64>,
@@ -47,13 +48,26 @@ struct Actor {
     hash: String,
     csrf: String,
 }
-const CHAT_SELECT: &str = "SELECT c.id, c.product_id, c.product_name, u.username, c.updated_at::text, (SELECT body FROM chat_messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) last_message, EXISTS(SELECT 1 FROM products WHERE id=c.product_id) product_exists FROM chats c JOIN customers u ON u.id=c.customer_id";
+const CHAT_SELECT: &str = "SELECT (SELECT COUNT(*) FROM chat_messages WHERE chat_id=c.id AND __UNREAD__) unread_count, c.id, c.product_id, c.product_name, u.username, c.updated_at::text, (SELECT body FROM chat_messages WHERE chat_id=c.id ORDER BY id DESC LIMIT 1) last_message, EXISTS(SELECT 1 FROM products WHERE id=c.product_id) product_exists FROM chats c JOIN customers u ON u.id=c.customer_id";
 const MESSAGE_COLUMNS: &str = "id, chat_id, is_admin, client_id, body, created_at::text";
+
+fn chat_select(admin: bool) -> String {
+    CHAT_SELECT.replace(
+        "__UNREAD__",
+        if admin {
+            "NOT is_admin AND id>c.admin_read_id"
+        } else {
+            "is_admin AND id>c.customer_read_id"
+        },
+    )
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/auth/chats", get(customer_list).post(create))
         .route("/api/admin/chats", get(admin_list))
+        .route("/api/admin/chats/{id}/read", post(admin_read))
+        .route("/api/auth/chats/{id}/read", post(customer_read))
         .route("/api/admin/chats/events", get(admin_events))
         .route("/api/auth/chats/events", get(customer_events))
         .route("/api/auth/chats/{id}/messages", get(customer_history))
@@ -125,9 +139,10 @@ async fn list(
     admin: bool,
 ) -> Result<Json<Vec<Chat>>, ApiError> {
     let actor = actor(&state, &headers, admin).await?;
+    let select = chat_select(admin);
     Ok(Json(
         sqlx::query_as(&format!(
-            "{CHAT_SELECT} WHERE ($1 OR c.customer_id=$2) ORDER BY c.updated_at DESC, c.id DESC"
+            "{select} WHERE ($1 OR c.customer_id=$2) ORDER BY c.updated_at DESC, c.id DESC"
         ))
         .bind(admin)
         .bind(actor.customer_id)
@@ -167,7 +182,8 @@ async fn create(
             .map_err(internal)?;
     let name = name.ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
     let id:i64=sqlx::query_scalar("INSERT INTO chats (customer_id,product_id,product_name) VALUES ($1,$2,$3) ON CONFLICT (customer_id,product_id) DO UPDATE SET product_name=EXCLUDED.product_name RETURNING id").bind(actor.customer_id).bind(input.product_id).bind(name).fetch_one(&mut *tx).await.map_err(internal)?;
-    let chat = sqlx::query_as(&format!("{CHAT_SELECT} WHERE c.id=$1"))
+    let select = chat_select(false);
+    let chat = sqlx::query_as(&format!("{select} WHERE c.id=$1"))
         .bind(id)
         .fetch_one(&mut *tx)
         .await
@@ -397,8 +413,9 @@ async fn notification(
     a: &Actor,
     message: &ChatMessage,
 ) -> Result<serde_json::Value, ApiError> {
+    let select = chat_select(a.is_admin);
     let chat: Chat = sqlx::query_as(&format!(
-        "{CHAT_SELECT} WHERE c.id=$1 AND ($2 OR c.customer_id=$3)"
+        "{select} WHERE c.id=$1 AND ($2 OR c.customer_id=$3)"
     ))
     .bind(message.chat_id)
     .bind(a.is_admin)
@@ -458,4 +475,47 @@ async fn notifications(mut socket: WebSocket, s: AppState, a: Actor, after: Opti
         }
     }
     let _ = socket.send(Message::Close(None)).await;
+}
+
+#[derive(Deserialize)]
+struct ReadInput {
+    through: i64,
+}
+async fn customer_read(
+    State(s): State<AppState>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+    Json(input): Json<ReadInput>,
+) -> Result<StatusCode, ApiError> {
+    mark_read(s, h, id, input, false).await
+}
+async fn admin_read(
+    State(s): State<AppState>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+    Json(input): Json<ReadInput>,
+) -> Result<StatusCode, ApiError> {
+    mark_read(s, h, id, input, true).await
+}
+async fn mark_read(
+    s: AppState,
+    h: HeaderMap,
+    id: i64,
+    input: ReadInput,
+    admin: bool,
+) -> Result<StatusCode, ApiError> {
+    let a = actor(&s, &h, admin).await?;
+    if h.get("x-csrf-token").and_then(|v| v.to_str().ok()) != Some(a.csrf.as_str()) {
+        return Err((StatusCode::FORBIDDEN, "Недействительный CSRF-токен"));
+    }
+    allowed(&s, &a, id).await?;
+    let column = if admin {
+        "admin_read_id"
+    } else {
+        "customer_read_id"
+    };
+    // Only acknowledge messages actually delivered to this side, never future IDs.
+    sqlx::query(&format!("UPDATE chats SET {column}=GREATEST({column},COALESCE((SELECT MAX(id) FROM chat_messages WHERE chat_id=$1 AND id<=$2 AND is_admin!=$3),0)) WHERE id=$1"))
+        .bind(id).bind(input.through).bind(admin).execute(&s.db).await.map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
 }

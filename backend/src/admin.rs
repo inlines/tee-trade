@@ -271,6 +271,9 @@ async fn validate_product(
     {
         return Err(bad("Проверьте категорию, год и цену"));
     }
+    if input.images.iter().filter(|i| i.carousel).count() > 1 {
+        return Err(bad("Выберите одно фото для главной"));
+    }
     if input.images.len() > 12 || input.images.iter().filter(|i| i.kind == "front").count() > 1 {
         return Err(bad(
             "Допустимо до 12 фотографий и не более одного основного фото",

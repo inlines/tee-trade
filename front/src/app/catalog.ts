@@ -9,7 +9,7 @@ export const categories = [
   { slug: 'accessories', name: 'Аксессуары', image: 'tote' },
   { slug: 'headwear', name: 'Головные уборы', image: 'cap' },
 ];
-export interface ProductImage { url: string; alt: string; kind: 'front' | 'detail' | 'label'; }
+export interface ProductImage { carousel?: boolean; url: string; alt: string; kind: 'front' | 'detail' | 'label'; }
 export interface Product {
   id: number; name: string; price_cents: number | null; category: string; brand: string;
   release_year: number | null; description: string; theme: string; images: ProductImage[]; is_demo: boolean;

@@ -103,7 +103,9 @@ try:
     assert headers['X-Content-Type-Options'] == 'nosniff'
     product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brand':'Test', 'release_year':2026,
                'description':'Temporary integration fixture', 'theme':'Test', 'price_cents':12345, 'is_demo':False,
-               'images':[{'url':main_url, 'alt':'Test front', 'kind':'front'}, {'url':label_url, 'alt':'Test label', 'kind':'label'}]}
+               'images':[{'url':main_url, 'alt':'Test front', 'kind':'front'}, {'url':label_url, 'alt':'Test gallery', 'kind':'detail', 'carousel':True}]}
+    invalid = copy.deepcopy(product); invalid['images'][0]['carousel'] = True
+    request('/api/admin/products', 'POST', invalid, 400)
     invalid = copy.deepcopy(product); invalid['images'][1]['kind'] = 'front'
     request('/api/admin/products', 'POST', invalid, 400)
     invalid = copy.deepcopy(product); invalid['images'][0]['url'] = 'https://example.com/arbitrary.jpg'
@@ -120,6 +122,7 @@ try:
     updated, _ = request(f'/api/admin/products/{product_id}', 'PUT', product)
     public, _ = request(f'/api/products/{product_id}', auth=False)
     assert updated == public and public['name'] == product['name']
+    assert public['images'][1]['carousel'] is True and public['images'][0]['carousel'] is False
     old_category, _ = request('/api/products?category=t-shirts', auth=False)
     new_category, _ = request('/api/products?category=accessories', auth=False)
     assert all(p['id'] != product_id for p in old_category)
@@ -136,6 +139,7 @@ try:
     home, _ = request('/api/storefront', auth=False)
     assert home['settings'] == settings
     assert [p['id'] for p in home['carousel']] == [product_id]
+    assert next(image['url'] for image in home['carousel'][0]['images'] if image['carousel']) == label_url
     assert [p['id'] for p in home['featured']] == [product_id]
     invalid = copy.deepcopy(settings); invalid['carousel_product_ids'] = [2147483647]
     request('/api/admin/storefront', 'PUT', invalid, 400)

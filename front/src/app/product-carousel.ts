@@ -65,7 +65,7 @@ export class ProductCarousel {
     });
   }
 
-  cover(product: Product) { return product.images.find(image => image.kind === 'front') ?? product.images[0] ?? {url:'/images/no-photo.svg', alt:'Фото пока нет'}; }
+  cover(product: Product) { return product.images.find(image => image.carousel) ?? product.images.find(image => image.kind === 'front') ?? product.images[0] ?? {url:'/images/no-photo.svg', alt:'Фото пока нет'}; }
   select(index: number) { this.selected.set(index); }
   move(direction: number) {
     const count = this.products().length;

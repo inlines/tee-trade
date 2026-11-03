@@ -12,7 +12,7 @@
       <button class="button dark" type="submit" [disabled]="busy() || loginForm.invalid">{{ busy() ? 'Входим…' : 'Войти' }}</button>
     </form>
   } @else {
-    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="tab.set('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="tab.set('storefront')">Главная страница</button><button [class.active]="tab() === 'chats'" (click)="tab.set('chats')">Чаты</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
+    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="tab.set('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="tab.set('storefront')">Главная страница</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
     @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
     @if (notice()) { <p class="form-success" role="status">{{ notice() }}</p> }
     @if (tab() === 'products') {
@@ -35,21 +35,26 @@
               <label class="full-width">Описание<textarea name="description" [(ngModel)]="draft.description" maxlength="10000" rows="7"></textarea></label>
               <label class="check-label"><input type="checkbox" name="isDemo" [(ngModel)]="draft.is_demo">Демонстрационный товар</label>
             </div>
-            <section class="photos-editor"><h3>Фотографии</h3><p>Все поля необязательны. Можно добавить до 12 фотографий: JPEG, PNG или WebP, до 8 МБ каждая. Фото ярлычка — по желанию.</p>
-              <div class="upload-actions"><label>Добавить фотографии<input type="file" accept="image/jpeg,image/png,image/webp" multiple (change)="upload($event, 'detail')"></label><label>Загрузить фото ярлычка<input type="file" accept="image/jpeg,image/png,image/webp" (change)="upload($event, 'label')"></label></div>
+            <section class="photos-editor"><h3>Фотографии</h3><p>Все поля необязательны. Можно добавить до 12 фотографий: JPEG, PNG или WebP, до 8 МБ каждая. Первая фотография станет обложкой; фото для главной можно выбрать отдельно.</p>
+              <div class="photo-dropzone" [class.dragging]="dragging()" [class.disabled]="uploading() || busy()" (dragover)="dragOver($event)" (dragleave)="dragLeave($event)" (drop)="drop($event)">
+                <span class="drop-symbol" aria-hidden="true">＋</span><strong class="desktop-upload">Перетащите фотографии сюда</strong>
+                <p class="desktop-upload">или выберите несколько файлов</p>
+                <label class="button dark photo-picker">Выбрать фотографии<input type="file" accept="image/*" multiple (change)="upload($event)" [disabled]="uploading() || busy()" aria-label="Выбрать фотографии товара"></label>
+                <p class="mobile-upload">Выберите несколько фото из галереи или сделайте снимок. Новые фото можно добавлять по очереди.</p>
+              </div>
               <div class="photo-grid">@for (image of images(); track image.url; let i = $index) {
-                <article class="photo-editor"><img [src]="image.url" [alt]="image.alt"><label>Тип фотографии<select [ngModel]="image.kind" (ngModelChange)="changeRole(i, $event)" [name]="'role-' + i"><option value="front">Основное фото</option><option value="detail">Детали</option><option value="label">Ярлычок</option></select></label><label>Подпись<input [ngModel]="image.alt" (ngModelChange)="changeAlt(i, $event)" [name]="'alt-' + i" maxlength="250"></label><div class="order-controls"><button type="button" (click)="moveImage(i, -1)" [disabled]="i === 0" aria-label="Фото раньше">↑</button><button type="button" (click)="moveImage(i, 1)" [disabled]="i === images().length - 1" aria-label="Фото позже">↓</button><button type="button" (click)="removeImage(i)">Убрать</button></div></article>
+                <article class="photo-editor"><img [src]="image.url" [alt]="image.alt"><div class="photo-roles"><button type="button" [class.selected]="image.kind === 'front'" [attr.aria-pressed]="image.kind === 'front'" (click)="changeRole(i, 'front')">{{image.kind === 'front' ? 'Обложка каталога' : 'На обложку'}}</button><button type="button" [class.selected]="image.carousel === true" (click)="setCarousel(i)" [attr.aria-pressed]="image.carousel === true">{{image.carousel ? 'Фото для главной' : 'Для главной'}}</button></div><label>Подпись<input [ngModel]="image.alt" (ngModelChange)="changeAlt(i, $event)" [name]="'alt-' + i" maxlength="250"></label><div class="order-controls"><button type="button" (click)="moveImage(i, -1)" [disabled]="i === 0" aria-label="Фото раньше">↑</button><button type="button" (click)="moveImage(i, 1)" [disabled]="i === images().length - 1" aria-label="Фото позже">↓</button><button type="button" (click)="removeImage(i)">Убрать</button></div></article>
               }</div>
             </section>
           </fieldset>
-          @if (uploading()) { <p role="status">Загружаем и обрабатываем фотографии…</p> }
+          @if (uploading()) { <p role="status">{{ uploadProgress() }}</p> }
           <div class="save-row"><button class="button dark" type="submit" [disabled]="busy() || uploading() || productForm.invalid">{{ busy() ? 'Сохраняем…' : 'Сохранить товар' }}</button>@if (editId()) { <a class="text-link" [routerLink]="['/product', editId()]" target="_blank" rel="noopener">Посмотреть товар</a> }</div>
         </form>
       }
-    } @else if (tab() === 'chats') { <app-chat-list [admin]="true" /> } @else if (settings(); as config) {
+    } @else if (settings(); as config) {
       <form #settingsForm="ngForm" (ngSubmit)="saveSettings()">
         <fieldset [disabled]="busy()">
-          <section class="settings-section"><label class="check-label"><input type="checkbox" name="carouselEnabled" [ngModel]="config.carousel_enabled" (ngModelChange)="patchSettings('carousel_enabled', $event)">Показывать верхнюю галерею</label><h2>Галерея товаров</h2><p>Слайды идут в указанном порядке. Используется основное фото товара.</p>
+          <section class="settings-section"><label class="check-label"><input type="checkbox" name="carouselEnabled" [ngModel]="config.carousel_enabled" (ngModelChange)="patchSettings('carousel_enabled', $event)">Показывать верхнюю галерею</label><h2>Галерея товаров</h2><p>Слайды идут в указанном порядке. Используется выбранное в товаре фото для главной; если оно не задано — обложка каталога.</p>
             <div class="selection-add"><select name="carouselChoice" [(ngModel)]="carouselChoice" aria-label="Товар для галереи"><option value="">Выберите товар</option>@for (product of products(); track product.id) { <option [value]="product.id" [disabled]="config.carousel_product_ids.includes(product.id)">{{ product.name || 'Без названия' }}</option> }</select><button type="button" class="button" (click)="addSelection('carousel_product_ids', carouselChoice)" [disabled]="!carouselChoice || config.carousel_product_ids.length >= 24">Добавить</button></div>
             <ol class="selected-products">@for (id of config.carousel_product_ids; track id; let i = $index) { <li><span>{{ productName(id) }}</span><div class="order-controls"><button type="button" (click)="moveSelection('carousel_product_ids', i, -1)" [disabled]="i === 0" aria-label="Слайд раньше">↑</button><button type="button" (click)="moveSelection('carousel_product_ids', i, 1)" [disabled]="i === config.carousel_product_ids.length - 1" aria-label="Слайд позже">↓</button><button type="button" (click)="removeSelection('carousel_product_ids', i)">Убрать</button></div></li> }</ol>
           </section>
