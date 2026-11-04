@@ -1,7 +1,7 @@
 :root {
   --paper:#f7f6f2;
   --ink:#20251f;
-  --muted:#767970;
+  --muted:#65695f;
   --line:#dcded4;
   --green:#d7e49b;
   --olive:#3d4c37;
@@ -934,6 +934,7 @@ app-product-carousel {
   position:relative;
   width:100%;
   height:auto;
+  aspect-ratio:3/2;
   max-height:70svh;
   overflow:hidden;
   touch-action:pan-y;
@@ -997,7 +998,7 @@ app-product-carousel {
 .carousel-arrow.previous { left:4vw; }
 .carousel-arrow.next { right:4vw; }
 @media(max-width:700px) {
-  .carousel-stage { max-height:65svh; }
+  .carousel-stage { aspect-ratio:1; max-height:65svh; }
   .carousel-photo { height:100%; }
   .carousel-arrow { width:38px; height:42px; top:50%; }
 }
@@ -1028,3 +1029,5 @@ app-root,main,.home-content,.gallery,.product-info,.header-main nav,app-product-
 }
 
 @media(max-width:700px) { .wordmark img { width:150px; } }
+
+.skeleton { background:#e8e7e0; }

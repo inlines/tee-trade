@@ -1,19 +1,25 @@
+import { ProgressiveImage } from './progressive-image';
 import { Component, DestroyRef, afterNextRender, computed, effect, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Product } from './catalog';
+import { Product, previewUrl } from './catalog';
 
 @Component({
-  selector: 'app-product-carousel', imports: [RouterLink],
+  selector: 'app-product-carousel', imports: [RouterLink, ProgressiveImage],
   template: `<section class="product-carousel" aria-roledescription="карусель" aria-label="Галерея товаров"
       (keydown.arrowleft)="onArrow($event, -1)" (keydown.arrowright)="onArrow($event, 1)">
     @if (loading()) { <p class="status" role="status">Загружаем галерею…</p> }
     @else if (error()) { <div class="status" role="alert"><p>{{ error() }}</p><button class="button" (click)="retry.emit()">Повторить</button></div> }
     @else if (current(); as product) {
-      <div class="carousel-stage" [style.aspect-ratio]="aspectRatio()" (touchstart)="onTouchStart($event)" (touchend)="onTouchEnd($event)">
+      <div class="carousel-stage" (touchstart)="onTouchStart($event)" (touchend)="onTouchEnd($event)">
         @for (item of products(); track item.id; let i = $index) {
           <div class="carousel-slide" [class.is-current]="i === index()" [attr.aria-hidden]="i !== index()" aria-roledescription="слайд" [attr.aria-label]="(i + 1) + ' из ' + products().length">
             <a class="carousel-product-link" [routerLink]="['/product', item.id]" [attr.tabindex]="i === index() ? 0 : -1" [attr.aria-label]="'Подробнее: ' + item.name" (click)="onProductClick($event)">
-              <img class="carousel-photo" (load)="imageLoaded($event, item.id)" [src]="cover(item).url" [alt]="cover(item).alt" [loading]="i === 0 ? 'eager' : 'lazy'" [attr.fetchpriority]="i === 0 ? 'high' : 'auto'" draggable="false">
+              @if(i === index()) {
+                <img class="carousel-photo" [appProgressiveImage]="cover(item).url" [alt]="cover(item).alt" loading="eager" fetchpriority="high" decoding="async" width="1200" height="800" draggable="false">
+              } @else if(i === (index()+1) % products().length) {
+                <img class="carousel-photo" [src]="previewUrl(cover(item).url)" alt="" loading="eager" fetchpriority="low" decoding="async" width="1200" height="800">
+              }
+
             </a>
           </div>
         }
@@ -27,9 +33,7 @@ import { Product } from './catalog';
   </section>`,
 })
 export class ProductCarousel {
-  readonly ratios = signal<Record<number, number>>({});
-  readonly aspectRatio = computed(() => this.ratios()[this.current()?.id ?? 0] ?? 1.5);
-  imageLoaded(event:Event, id:number) { const image=event.target as HTMLImageElement; if(image.naturalHeight) this.ratios.update(ratios=>({...ratios,[id]:image.naturalWidth/image.naturalHeight})); }
+  readonly previewUrl = previewUrl;
   readonly products = input<Product[]>([]);
   readonly loading = input(false);
   readonly error = input('');

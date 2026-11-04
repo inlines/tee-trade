@@ -2,11 +2,11 @@ import { Component, inject, input } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AdminService } from './admin.service';
-import { Product } from './catalog';
+import { Product, previewUrl } from './catalog';
 @Component({
   selector: 'app-product-card', imports: [RouterLink, CurrencyPipe],
   template: `<a class="product-card" [routerLink]="['/product', product().id]">
-    <div class="product-cover"><img [src]="previewUrl()" [alt]="cover().alt" loading="lazy" width="640" height="720">
+    <div class="product-cover"><img [src]="previewUrl()" [alt]="cover().alt" [loading]="priority() ? 'eager' : 'lazy'" [attr.fetchpriority]="priority() ? 'high' : 'auto'" decoding="async" width="640" height="720">
       @if (product().sold) { <span class="demo-badge">Продано</span> }
       @if (!product().sold && product().is_demo) { <span class="demo-badge">Демо</span> }
     </div>
@@ -20,7 +20,8 @@ import { Product } from './catalog';
 })
 export class ProductCard {
   readonly admin = inject(AdminService);
+  readonly priority = input(false);
   readonly product = input.required<Product>();
-  previewUrl() { const url=this.cover().url; return /^\/api\/media\/[a-f0-9]{64}$/i.test(url)?url+'/preview':url; }
+  previewUrl() { return previewUrl(this.cover().url); }
   cover() { return this.product().images.find(image => image.kind === 'front') ?? this.product().images[0] ?? {url:'/images/no-photo.svg', alt:'Фото пока нет'}; }
 }

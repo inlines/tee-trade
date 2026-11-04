@@ -1,3 +1,4 @@
+import { ProgressiveImage } from './progressive-image';
 import { RequestsService } from './requests.service';
 import { RequestDialog } from './request-dialog';
 import { Component, computed, inject, signal, effect } from '@angular/core';
@@ -5,7 +6,7 @@ import { CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, of, startWith, Subject, switchMap } from 'rxjs';
-import { CatalogService, categories, categoryName, loadState, LoadState, Product } from './catalog';
+import { CatalogService, categories, categoryName, loadState, LoadState, Product, previewUrl } from './catalog';
 import { AdminService } from './admin.service';
 import { ChatService } from './chat.service';
 import { CustomerService } from './customer.service';
@@ -15,7 +16,7 @@ import { ProductCarousel } from './product-carousel';
 @Component({
   selector: 'app-home', imports: [RouterLink, ProductCard, ProductCarousel],
   template: `@if (state(); as state) {
-    @if (state.loading) { <p class="status" role="status">Загружаем витрину…</p> }
+    @if (state.loading) { <div class="home-loading" role="status" aria-label="Загружаем витрину"><div class="carousel-stage skeleton"></div></div> }
     @else if (state.error) { <div class="status" role="alert"><p>{{ state.error }}</p><button class="button" (click)="retry.next()">Повторить</button></div> }
     @else if (state.data; as home) {
       @if (home.settings.carousel_enabled) { <app-product-carousel [products]="home.carousel" /> }
@@ -54,7 +55,7 @@ export class HomePage {
       @else if (state.error) { <div class="status" role="alert"><p>{{ state.error }}</p><button class="button" (click)="retry.next()">Повторить</button></div> }
       @else {
         <div class="catalog-toolbar"><p>Позиций: {{ state.data?.length ?? 0 }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option><option value="year">По году выпуска</option></select></label></div>
-        <div class="product-grid">@for (product of sorted(); track product.id) { <app-product-card [product]="product" /> } @empty { <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> }</div>
+        <div class="product-grid">@for (product of sorted(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" /> } @empty { <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> }</div>
         @if (hasDemo()) { <p class="demo-note">Демо-коллекция: товары и иллюстрации показывают устройство каталога. Фотографии реальных вещей будут добавлены отдельно.</p> }
       }
     }`,
@@ -89,7 +90,7 @@ export class CatalogPage {
 }
 
 @Component({
-  selector: 'app-product', imports: [RouterLink, CurrencyPipe, RequestDialog],
+  selector: 'app-product', imports: [RouterLink, CurrencyPipe, RequestDialog, ProgressiveImage],
   template: `@if (state(); as state) {
     @if (state.loading) { <p class="status" role="status">Загружаем товар…</p> }
     @else if (state.notFound) { <div class="status"><p class="eyebrow">404</p><h1>Товар не найден</h1><a routerLink="/catalog" class="button dark">Вернуться в каталог</a></div> }
@@ -98,10 +99,10 @@ export class CatalogPage {
       <nav class="breadcrumbs" aria-label="Хлебные крошки"><a routerLink="/">Главная</a><span>/</span><a routerLink="/catalog">Каталог</a><span>/</span><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a><span>/</span><span>{{ product.name || 'Без названия' }}</span></nav>
       <section class="product-detail">
         <div class="gallery">
-          @if (activeImage(); as image) { <div class="gallery-main"><img [src]="image.url" [alt]="image.alt" width="640" height="720"></div> }
+          @if (activeImage(); as image) { <div class="gallery-main"><img [appProgressiveImage]="image.url" [alt]="image.alt" width="640" height="720" fetchpriority="high" loading="eager" decoding="async"></div> }
           @if (!activeImage()) { <div class="gallery-main"><img src="/images/no-photo.svg" alt="Фото пока нет" width="640" height="720"></div> }
           <div class="thumbnails" aria-label="Фотографии товара">@for (image of orderedImages(); track $index; let i = $index) {
-            <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="image.url" alt="" width="100" height="110"></button>
+            <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="previewUrl(image.url)" alt="" width="100" height="110" loading="lazy" decoding="async"></button>
           }</div>
         </div>
         <div class="product-info"><p class="eyebrow">{{ product.brand }}{{ product.brand && product.release_year ? ' / ' : '' }}{{ product.release_year }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
@@ -111,7 +112,7 @@ export class CatalogPage {
           @if (product.is_demo) { <p class="demo-note">Демонстрационный товар. В галерее — иллюстрации, включая шаблон ярлычка. Они не заменяют фотографии реальной вещи.</p> }
           @if (!product.sold && customer.session() && !admin.session()) { <button class="button dark" (click)="openChat(product.id)" [disabled]="openingChat()">{{ openingChat() ? 'Открываем чат…' : 'Написать' }}</button> }
           @if (!product.sold && customer.session() && !admin.session()) { <button class="button" style="margin-left:12px" (click)="requestOpen.set(true)">Оставить заявку</button> }
-          @if (!product.sold && requestOpen() && customer.session() && !admin.session()) { <app-request-dialog [product]="product" (closed)="requestOpen.set(false)" /> }
+          @if (!product.sold && requestOpen() && customer.session() && !admin.session()) { @defer (when requestOpen()) { <app-request-dialog [product]="product" (closed)="requestOpen.set(false)" /> } }
           @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
           @if (!product.sold && customer.ready() && !customer.session() && !admin.session()) {
             <p class="seller-contact">Чтобы написать продавцу или оставить заявку, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
@@ -123,6 +124,7 @@ export class CatalogPage {
   }`,
 })
 export class ProductPage {
+  readonly previewUrl = previewUrl;
   private trackedProduct:number|null=null;
   constructor(){effect(()=>{
     const product=this.state()?.data;

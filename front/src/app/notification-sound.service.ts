@@ -10,7 +10,7 @@ export class NotificationSound {
   private lastPlayed = 0;
   constructor() {
     try { this.enabled.set(localStorage.getItem('chat-sound') !== 'off'); } catch {}
-    this.audio.preload = 'auto';
+    this.audio.preload = 'none';
     // A completed tap/click also activates media on touch browsers. This service
     // is created before login, so the sign-in gesture can unlock the same player.
     const unlock = (event:Event) => {

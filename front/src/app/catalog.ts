@@ -33,3 +33,7 @@ export class CatalogService {
   product(id: string) { return this.http.get<Product>(`/api/products/${encodeURIComponent(id)}`); }
 }
 export const categoryName = (slug: string) => categories.find(category => category.slug === slug)?.name ?? 'Каталог';
+
+export function previewUrl(url: string): string {
+  return /^\/api\/media\/[a-f0-9]{64}$/i.test(url) ? url+'/preview' : url;
+}
