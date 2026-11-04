@@ -1,12 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
+import { firstValueFrom, timeout, tap, filter, map } from 'rxjs';
 import { Product, ProductImage } from './catalog';
 
 export interface AdminSession { username: string; csrf_token: string; }
 export interface ProductDraft {
   name: string; category: string; brand: string; release_year: number | null; description: string;
-  theme: string; price_cents: number | null; images: ProductImage[]; is_demo: boolean;
+  theme: string; price_cents: number | null; images: ProductImage[]; is_demo: boolean; sold: boolean;
 }
 export interface StorefrontSettings {
   carousel_product_ids: number[]; featured_product_ids: number[]; categories: string[];
@@ -41,8 +41,8 @@ export class AdminService {
   }
   deleteProduct(id: number) { return firstValueFrom(this.http.delete<void>(`/api/admin/products/${id}`, { headers: this.headers() })); }
   saveSettings(settings: StorefrontSettings) { return firstValueFrom(this.http.put<StorefrontSettings>('/api/admin/storefront', settings, { headers: this.headers() })); }
-  async upload(file: File) {
+  async upload(file: File, progress: (percent: number) => void = () => {}) {
     const body = new FormData(); body.append('file', file);
-    return firstValueFrom(this.http.post<{ url: string }>('/api/admin/uploads', body, { headers: this.headers() }));
+    return firstValueFrom(this.http.post<{ url: string }>('/api/admin/uploads', body, { headers: this.headers(), observe:'events', reportProgress:true }).pipe(timeout({each:45000}),tap(event=>{if(event.type===HttpEventType.UploadProgress)progress(Math.round(100*event.loaded/(event.total||file.size)));}),filter((event):event is HttpResponse<{url:string}>=>event.type===HttpEventType.Response),map(event=>event.body!)));
   }
 }

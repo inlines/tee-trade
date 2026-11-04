@@ -106,12 +106,13 @@ async fn create(
         }
     }
     let mut tx = s.db.begin().await.map_err(internal)?;
-    let name: String = sqlx::query_scalar("SELECT name FROM products WHERE id=$1 FOR KEY SHARE")
-        .bind(d.product_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
+    let name: String =
+        sqlx::query_scalar("SELECT name FROM products WHERE id=$1 AND NOT sold FOR SHARE")
+            .bind(d.product_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(internal)?
+            .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
     let chat_id:i64=sqlx::query_scalar("INSERT INTO chats(customer_id,product_id,product_name) VALUES($1,$2,$3) ON CONFLICT(customer_id,product_id) DO UPDATE SET product_name=EXCLUDED.product_name RETURNING id").bind(a.customer_id).bind(d.product_id).bind(&name).fetch_one(&mut *tx).await.map_err(internal)?;
     let id:Option<i64>=sqlx::query_scalar("INSERT INTO purchase_requests(customer_id,chat_id,product_id,product_name,last_name,first_name,patronymic,contact,city) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(customer_id,product_id) WHERE status <> 'completed' DO NOTHING RETURNING id").bind(a.customer_id).bind(chat_id).bind(d.product_id).bind(name).bind(d.last_name).bind(d.first_name).bind(d.patronymic).bind(d.contact).bind(d.city).fetch_optional(&mut *tx).await.map_err(internal)?;
     let id = id.ok_or((

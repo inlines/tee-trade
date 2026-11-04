@@ -7,12 +7,13 @@ export const categories = [
   { slug: 'sneakers', name: 'Кроссовки', image: 'sneakers' },
   { slug: 't-shirts', name: 'Футболки', image: 't-shirt' },
   { slug: 'accessories', name: 'Аксессуары', image: 'tote' },
+  { slug: 'hoodies', name: 'Худи', image: 't-shirt' },
   { slug: 'headwear', name: 'Головные уборы', image: 'cap' },
 ];
 export interface ProductImage { carousel?: boolean; url: string; alt: string; kind: 'front' | 'detail' | 'label'; }
 export interface Product {
   id: number; name: string; price_cents: number | null; category: string; brand: string;
-  release_year: number | null; description: string; theme: string; images: ProductImage[]; is_demo: boolean;
+  release_year: number | null; description: string; theme: string; images: ProductImage[]; is_demo: boolean; sold: boolean;
 }
 export interface LoadState<T> { loading: boolean; data: T | null; error: string; notFound: boolean; }
 export function loadState<T>(request: Observable<T>): Observable<LoadState<T>> {
@@ -27,7 +28,7 @@ export function loadState<T>(request: Observable<T>): Observable<LoadState<T>> {
 export class CatalogService {
   private readonly http = inject(HttpClient);
   recordView(id:number) { this.http.post('/api/auth/product-views/'+id,{}).subscribe({error:()=>{}}); }
-  list(category = '') { return this.http.get<Product[]>('/api/products', { params: category ? { category } : {} }); }
+  list(category = '', sold = false) { return this.http.get<Product[]>('/api/products', { params: { ...(category ? {category} : {}), sold } }); }
   storefront() { return this.http.get<Storefront>('/api/storefront'); }
   product(id: string) { return this.http.get<Product>(`/api/products/${encodeURIComponent(id)}`); }
 }

@@ -39,6 +39,10 @@ try{
  const adminWs=await connect(admin,0,true),buyerWs=await connect(buyer,0),strangerWs=await connect(stranger,0);
  const baseline=await buyerWs.wait(e=>e.type==='request_events');
  await adminWs.wait(e=>e.type==='ready');await buyerWs.wait(e=>e.type==='ready');await strangerWs.wait(e=>e.type==='ready');
+ await request(admin,'/api/admin/products/'+productId,'PUT',{name:'Temporary request test',category:'hoodies',sold:true});
+ await request(buyer,'/api/auth/requests','POST',d,404);
+ await request(buyer,'/api/auth/chats','POST',{product_id:productId},404);
+ await request(admin,'/api/admin/products/'+productId,'PUT',{name:'Temporary request test',category:'hoodies',sold:false});
  const before=(await request(admin,'/api/admin/requests/events')).cursor;
  const row=await request(buyer,'/api/auth/requests','POST',d,201);
  assert.equal((await adminWs.wait(e=>e.type==='request_events'&&e.events.length)).events[0].request_id,row.id);

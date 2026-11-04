@@ -23,6 +23,8 @@ export class AdminPage {
   readonly checking = signal(true);
   readonly busy = signal(false);
   readonly uploading = signal(false);
+  readonly failedUploads = signal<File[]>([]);
+  retryUploads() { void this.uploadFiles(this.failedUploads()); }
   readonly dragging = signal(false);
   readonly uploadProgress = signal('');
   readonly error = signal('');
@@ -47,7 +49,7 @@ export class AdminPage {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
   }
-  private emptyDraft(): ProductDraft { return { name:'', category:'', brand:'', release_year:null, description:'', theme:'', price_cents:null, images:[], is_demo:false }; }
+  private emptyDraft(): ProductDraft { return { name:'', category:'', brand:'', release_year:null, description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
   private async initialize() {
     try { await this.api.restore(); if (this.api.session()) await this.load(); }
     catch (error) { this.handleError(error); }
@@ -88,6 +90,7 @@ export class AdminPage {
     finally { this.busy.set(false); }
   }
   startEdit(product?: Product) {
+    this.failedUploads.set([]);
     if (this.dirtyProduct() && !window.confirm('Отменить несохранённые изменения товара?')) return;
     this.editId.set(product?.id ?? null);
     this.draft = product ? { ...product, images: [] } : this.emptyDraft();
@@ -111,20 +114,32 @@ export class AdminPage {
   private async uploadFiles(files: File[]) {
     if (!files.length || this.busy() || this.uploading()) return;
     this.error.set('');
-    if (this.images().length + files.length > 12) { this.error.set('Можно добавить не более 12 фотографий.'); return; }
-    if (files.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg','image/png','image/webp'].includes(file.type))) { this.error.set('Выберите JPEG, PNG или WebP размером до 8 МБ.'); return; }
+    this.failedUploads.set([]);
     this.uploading.set(true);
+    const failed: File[]=[]; const errors: string[]=[];
     try {
       for (const [index,file] of files.entries()) {
-        this.uploadProgress.set(`Загружаем фото ${index+1} из ${files.length}…`);
-        const { url } = await this.api.upload(file);
-        const role = this.images().some(image => image.kind === 'front') ? 'detail' : 'front';
-        this.images.update(images => this.normalizeImages([...images, { url, kind: role, alt: `${this.draft.name || 'Товар'} — фото ${this.images().length+1}` }]));
-        this.dirtyProduct.set(true);
+        this.uploadProgress.set(`Загружаем ${index+1} из ${files.length}: ${file.name}`);
+        try {
+          if(this.images().length>=12)throw new Error('Лимит — 12 фотографий на товар.');
+          if(file.size>8*1024*1024)throw new Error('Файл больше 8 МБ.');
+          if(!['image/jpeg','image/png','image/webp'].includes(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name))throw new Error('Поддерживаются JPEG, PNG и WebP.');
+          const {url}=await this.api.upload(file,percent=>this.uploadProgress.set(`${index+1} из ${files.length}: ${file.name} — ${percent>=100?'обработка на сервере':percent+'%'}`));
+          const role=this.images().some(image=>image.kind==='front')?'detail':'front';
+          this.images.update(images=>this.normalizeImages([...images,{url,kind:role,alt:`${this.draft.name||'Товар'} — фото ${images.length+1}`} ]));
+          this.dirtyProduct.set(true);
+        } catch(error) {
+          failed.push(file);
+          const message=error instanceof Error&&error.name==='TimeoutError'?'Сервер не ответил за 45 секунд. Повторите загрузку.':error instanceof HttpErrorResponse?(typeof error.error==='string'&&!error.error.startsWith('<')?error.error:'Ошибка соединения или сервера.'):error instanceof Error?error.message:'Не удалось загрузить.';
+          errors.push(`${file.name}: ${message}`);
+          if(error instanceof HttpErrorResponse && [401,403].includes(error.status)) { failed.push(...files.slice(index+1)); break; }
+        }
       }
-    } catch (error) { this.handleError(error); }
-    finally { this.uploading.set(false); this.uploadProgress.set(''); }
+      this.failedUploads.set(failed);
+      if(errors.length)this.error.set(errors.join(' '));
+    } finally {this.uploading.set(false);this.uploadProgress.set('');}
   }
+
   private normalizeImages(images: ProductImage[]): ProductImage[] {
     const cover=Math.max(0,images.findIndex(image=>image.kind==='front'));
     const carousel=images.findIndex(image=>image.carousel);
@@ -149,7 +164,7 @@ export class AdminPage {
       const product = await this.api.saveProduct(this.editId(), { ...this.draft, price_cents:this.price == null ? null : Math.round(price * 100), images:this.images() });
       this.products.update(products => [product, ...products.filter(p => p.id !== product.id)]);
       this.editId.set(product.id); this.draft = { ...product }; this.dirtyProduct.set(false);
-      this.notice.set('Товар сохранён и доступен в каталоге.');
+      this.notice.set(product.sold?'Товар сохранён в архиве.':'Товар сохранён и доступен в каталоге.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
   }

@@ -98,6 +98,8 @@ try:
     print('PASS: create, retrieve and edit an entirely empty product')
     main_url = upload(png(800,600))
     label_url = upload(png())
+    for _ in range(4): upload(png(800,600))
+    print('PASS: six sequential photo uploads')
     content, headers = request(main_url, auth=False)
     assert content.startswith(b'\xff\xd8') and headers['Content-Type'] == 'image/jpeg'
     assert headers['X-Content-Type-Options'] == 'nosniff'
@@ -148,6 +150,17 @@ try:
     public, _ = request(f'/api/products/{product_id}', auth=False)
     assert updated == public and public['name'] == product['name']
     assert public['images'][1]['carousel'] is True and public['images'][0]['carousel'] is False
+    archived_draft = {**product, 'category':'hoodies', 'sold':True}
+    pid = public['id']
+    request(f'/api/admin/products/{pid}', 'PUT', archived_draft)
+    assert all(p['id'] != pid for p in request('/api/products', auth=False)[0])
+    assert any(p['id'] == pid for p in request('/api/products?sold=true&category=hoodies', auth=False)[0])
+    assert request(f'/api/products/{pid}', auth=False)[0]['sold'] is True
+    request(f'/api/admin/products/{pid}', 'PUT', {**product, 'sold':False})
+    assert all(p['id'] != pid for p in request('/api/products?sold=true', auth=False)[0])
+    assert any(p['id'] == pid for p in request('/api/products', auth=False)[0])
+    print('PASS: hoodie category, sold archive, catalog cache isolation, restoring availability')
+
     old_category, _ = request('/api/products?category=t-shirts', auth=False)
     new_category, _ = request('/api/products?category=accessories', auth=False)
     assert all(p['id'] != product_id for p in old_category)

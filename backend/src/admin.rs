@@ -247,6 +247,7 @@ struct ProductInput {
     images: Vec<ProductImage>,
     #[serde(default)]
     is_demo: bool,
+    sold: bool,
 }
 fn text_valid(value: &str, max: usize) -> bool {
     !value.trim().is_empty() && value.chars().count() <= max
@@ -319,8 +320,8 @@ async fn create(
         .await
         .map_err(internal)?;
     validate_product(&input, None, &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brand, release_year, description, theme, images, is_demo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.release_year).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brand, release_year, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.release_year).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await
@@ -395,8 +396,8 @@ async fn update(
     .map_err(internal)?
     .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
     validate_product(&input, Some(&existing), &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brand=$4, release_year=$5, description=$6, theme=$7, images=$8, is_demo=$9 WHERE id=$10 RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.release_year).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brand=$4, release_year=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.release_year).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await
@@ -543,7 +544,7 @@ async fn save_settings(
     {
         return Err(bad("Проверьте заголовки и длину текстов витрины"));
     }
-    if settings.categories.len() > 4
+    if settings.categories.len() > CATEGORIES.len()
         || settings.categories.iter().collect::<HashSet<_>>().len() != settings.categories.len()
         || settings
             .categories
@@ -605,7 +606,7 @@ pub async fn storefront(State(state): State<AppState>) -> Result<Json<Storefront
 }
 async fn selected_products(db: &PgPool, ids: &[i32]) -> Result<Vec<Product>, ApiError> {
     sqlx::query_as::<_, Product>(&format!(
-        "SELECT {PRODUCT_COLUMNS} FROM products WHERE id = ANY($1) ORDER BY array_position($1, id)"
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE id = ANY($1) AND NOT sold ORDER BY array_position($1, id)"
     ))
     .bind(ids)
     .fetch_all(db)

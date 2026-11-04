@@ -49,13 +49,15 @@ struct Product {
     theme: String,
     images: sqlx::types::Json<Vec<ProductImage>>,
     is_demo: bool,
+    sold: bool,
 }
-const PRODUCT_COLUMNS: &str =
-    "id, name, price_cents, category, brand, release_year, description, theme, images, is_demo";
-const CATEGORIES: [&str; 4] = ["sneakers", "t-shirts", "accessories", "headwear"];
+const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brand, release_year, description, theme, images, is_demo, sold";
+const CATEGORIES: [&str; 5] = ["sneakers", "t-shirts", "accessories", "headwear", "hoodies"];
 #[derive(Deserialize)]
 struct CatalogQuery {
     category: Option<String>,
+    #[serde(default)]
+    sold: bool,
 }
 type ApiError = (StatusCode, &'static str);
 fn internal(error: impl std::fmt::Display) -> ApiError {
@@ -76,7 +78,8 @@ async fn products(
         .await
         .map_err(internal)?;
     let key = format!(
-        "products:v3:{revision}:{}",
+        "products:v4:{revision}:{}:{}",
+        query.sold,
         query.category.as_deref().unwrap_or("all")
     );
     let mut cache = state.cache.get_multiplexed_async_connection().await.ok();
@@ -99,8 +102,8 @@ async fn products(
         .with_label_values(&[cache_result])
         .inc();
     let products = sqlx::query_as::<_, Product>(&format!(
-        "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) ORDER BY id"
-    )).bind(query.category).fetch_all(&state.db).await.map_err(internal)?;
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) AND sold=$2 ORDER BY id"
+    )).bind(query.category).bind(query.sold).fetch_all(&state.db).await.map_err(internal)?;
     if let Some(connection) = cache.as_mut() {
         if let Ok(value) = serde_json::to_string(&products) {
             let _: redis::RedisResult<()> = connection.set_ex(&key, value, 60).await;

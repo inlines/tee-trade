@@ -181,7 +181,7 @@ async fn create(
     }
     let mut tx = s.db.begin().await.map_err(internal)?;
     let name: Option<String> =
-        sqlx::query_scalar("SELECT name FROM products WHERE id=$1 FOR KEY SHARE")
+        sqlx::query_scalar("SELECT name FROM products WHERE id=$1 AND NOT sold FOR SHARE")
             .bind(input.product_id)
             .fetch_optional(&mut *tx)
             .await

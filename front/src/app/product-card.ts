@@ -7,7 +7,8 @@ import { Product } from './catalog';
   selector: 'app-product-card', imports: [RouterLink, CurrencyPipe],
   template: `<a class="product-card" [routerLink]="['/product', product().id]">
     <div class="product-cover"><img [src]="previewUrl()" [alt]="cover().alt" loading="lazy" width="640" height="720">
-      @if (product().is_demo) { <span class="demo-badge">Демо</span> }
+      @if (product().sold) { <span class="demo-badge">Продано</span> }
+      @if (!product().sold && product().is_demo) { <span class="demo-badge">Демо</span> }
     </div>
     <div class="product-meta"><span>{{ product().brand }}</span><span>{{ product().release_year }}</span></div>
     <h3>{{ product().name || 'Без названия' }}</h3>

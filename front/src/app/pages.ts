@@ -45,16 +45,16 @@ export class HomePage {
 
 @Component({
   selector: 'app-catalog', imports: [RouterLink, RouterLinkActive, ProductCard],
-  template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / КАТАЛОГ</p><h1>{{ title() }}</h1></section>
-    <nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
-      @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>
+  template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / {{ archived ? 'АРХИВ' : 'КАТАЛОГ' }}</p><h1>{{ title() }}</h1></section>
+    @if(!archived){<nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
+      @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>}
     @if (!validCategory()) { <div class="status"><h2>Такой категории нет</h2><a routerLink="/catalog" class="text-link">Перейти ко всем вещам →</a></div> }
     @else if (state(); as state) {
       @if (state.loading) { <p class="status" role="status">Загружаем вещи…</p> }
       @else if (state.error) { <div class="status" role="alert"><p>{{ state.error }}</p><button class="button" (click)="retry.next()">Повторить</button></div> }
       @else {
         <div class="catalog-toolbar"><p>Позиций: {{ state.data?.length ?? 0 }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option><option value="year">По году выпуска</option></select></label></div>
-        <div class="product-grid">@for (product of sorted(); track product.id) { <app-product-card [product]="product" /> } @empty { <div class="status"><h2>В этой категории пока нет вещей</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> }</div>
+        <div class="product-grid">@for (product of sorted(); track product.id) { <app-product-card [product]="product" /> } @empty { <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> }</div>
         @if (hasDemo()) { <p class="demo-note">Демо-коллекция: товары и иллюстрации показывают устройство каталога. Фотографии реальных вещей будут добавлены отдельно.</p> }
       }
     }`,
@@ -65,12 +65,13 @@ export class CatalogPage {
   private readonly api = inject(CatalogService);
   readonly category = toSignal(this.route.paramMap.pipe(map(params => params.get('category') ?? '')), { initialValue: '' });
   readonly validCategory = computed(() => !this.category() || categories.some(category => category.slug === this.category()));
-  readonly title = computed(() => this.validCategory() ? (this.category() ? categoryName(this.category()) : 'Каталог') : 'Категория не найдена');
+  readonly archived = this.route.snapshot.data['archive']===true;
+  readonly title = computed(() => this.archived ? 'Архив' : this.validCategory() ? (this.category() ? categoryName(this.category()) : 'Каталог') : 'Категория не найдена');
   readonly retry = new Subject<void>();
   readonly state = toSignal(combineLatest([this.route.paramMap, this.retry.pipe(startWith(undefined))]).pipe(
     switchMap(([params]) => {
       const category = params.get('category') ?? '';
-      return !category || categories.some(item => item.slug === category) ? loadState(this.api.list(category)) : of<LoadState<Product[]>>({ loading: false, data: [], error: '', notFound: true });
+      return !category || categories.some(item => item.slug === category) ? loadState(this.api.list(category,this.archived)) : of<LoadState<Product[]>>({ loading: false, data: [], error: '', notFound: true });
     }),
   ));
   readonly sort = signal('default');
@@ -99,22 +100,23 @@ export class CatalogPage {
         <div class="gallery">
           @if (activeImage(); as image) { <div class="gallery-main"><img [src]="image.url" [alt]="image.alt" width="640" height="720"></div> }
           @if (!activeImage()) { <div class="gallery-main"><img src="/images/no-photo.svg" alt="Фото пока нет" width="640" height="720"></div> }
-          <div class="thumbnails" aria-label="Фотографии товара">@for (image of product.images; track $index; let i = $index) {
+          <div class="thumbnails" aria-label="Фотографии товара">@for (image of orderedImages(); track $index; let i = $index) {
             <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="image.url" alt="" width="100" height="110"></button>
           }</div>
         </div>
         <div class="product-info"><p class="eyebrow">{{ product.brand }}{{ product.brand && product.release_year ? ' / ' : '' }}{{ product.release_year }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
           <dl><div><dt>Бренд</dt><dd>{{ product.brand || 'Не указан' }}</dd></div><div><dt>Год выпуска</dt><dd>{{ product.release_year || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
+          @if(product.sold){<p class="demo-note">Продано · Товар в архиве</p>}
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
           @if (product.is_demo) { <p class="demo-note">Демонстрационный товар. В галерее — иллюстрации, включая шаблон ярлычка. Они не заменяют фотографии реальной вещи.</p> }
-          @if (customer.session() && !admin.session()) { <button class="button dark" (click)="openChat(product.id)" [disabled]="openingChat()">{{ openingChat() ? 'Открываем чат…' : 'Написать' }}</button> }
-          @if (customer.session() && !admin.session()) { <button class="button" style="margin-left:12px" (click)="requestOpen.set(true)">Оставить заявку</button> }
-          @if (requestOpen() && customer.session() && !admin.session()) { <app-request-dialog [product]="product" (closed)="requestOpen.set(false)" /> }
+          @if (!product.sold && customer.session() && !admin.session()) { <button class="button dark" (click)="openChat(product.id)" [disabled]="openingChat()">{{ openingChat() ? 'Открываем чат…' : 'Написать' }}</button> }
+          @if (!product.sold && customer.session() && !admin.session()) { <button class="button" style="margin-left:12px" (click)="requestOpen.set(true)">Оставить заявку</button> }
+          @if (!product.sold && requestOpen() && customer.session() && !admin.session()) { <app-request-dialog [product]="product" (closed)="requestOpen.set(false)" /> }
           @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
-          @if (customer.ready() && !customer.session() && !admin.session()) {
+          @if (!product.sold && customer.ready() && !customer.session() && !admin.session()) {
             <p class="seller-contact">Чтобы написать продавцу или оставить заявку, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
           }
-          <a class="text-link back-link" [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">← Назад в раздел</a>
+          <a class="text-link back-link" [routerLink]="product.sold ? ['/archive'] : product.category ? ['/catalog', product.category] : ['/catalog']">← Назад в раздел</a>
         </div>
       </section>
     }
@@ -147,7 +149,8 @@ export class ProductPage {
   ));
   readonly selection = signal({ productId: 0, index: 0 });
   readonly activeIndex = computed(() => this.selection().productId === this.state()?.data?.id ? this.selection().index : 0);
-  readonly activeImage = computed(() => this.state()?.data?.images[this.activeIndex()]);
+  readonly orderedImages = computed(() => [...(this.state()?.data?.images??[])].sort((a,b)=>Number(b.kind==='front')-Number(a.kind==='front')));
+  readonly activeImage = computed(() => this.orderedImages()[this.activeIndex()]);
   readonly categoryName = categoryName;
   choose(productId: number, index: number) { this.selection.set({ productId, index }); }
 }
