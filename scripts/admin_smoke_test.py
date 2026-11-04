@@ -173,6 +173,7 @@ try:
     settings['featured_product_ids'] = [product_id]
     settings['arrivals_title'] = 'Integration storefront test'
     settings['categories'] = ['accessories']
+    request('/api/storefront', auth=False)  # Warm previous revision before changing settings.
     request('/api/admin/storefront', 'PUT', settings)
     home, _ = request('/api/storefront', auth=False)
     assert home['settings'] == settings

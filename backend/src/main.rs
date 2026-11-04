@@ -1,4 +1,5 @@
 mod admin;
+mod catalog_cache;
 mod chat;
 mod customers;
 mod monitoring;
@@ -12,7 +13,6 @@ use axum::{
     routing::get,
 };
 use prometheus::{Encoder, IntCounterVec, Registry, TextEncoder};
-use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
@@ -73,58 +73,35 @@ async fn products(
             return Err((StatusCode::BAD_REQUEST, "Unknown category"));
         }
     }
-    let revision: i64 = sqlx::query_scalar("SELECT version FROM catalog_revision")
-        .fetch_one(&state.db)
-        .await
-        .map_err(internal)?;
-    let key = format!(
-        "products:v4:{revision}:{}:{}",
+    let resource = format!(
+        "products:{}:{}",
         query.sold,
         query.category.as_deref().unwrap_or("all")
     );
-    let mut cache = state.cache.get_multiplexed_async_connection().await.ok();
-    let mut cache_result = "error";
-    if let Some(connection) = cache.as_mut() {
-        match connection.get::<_, Option<String>>(&key).await {
-            Ok(Some(value)) => {
-                if let Ok(products) = serde_json::from_str(&value) {
-                    state.monitoring.cache.with_label_values(&["hit"]).inc();
-                    return Ok(Json(products));
-                }
-            }
-            Ok(None) => cache_result = "miss",
-            Err(_) => {}
-        }
-    }
-    state
-        .monitoring
-        .cache
-        .with_label_values(&[cache_result])
-        .inc();
-    let products = sqlx::query_as::<_, Product>(&format!(
-        "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) AND sold=$2 ORDER BY id"
-    )).bind(query.category).bind(query.sold).fetch_all(&state.db).await.map_err(internal)?;
-    if let Some(connection) = cache.as_mut() {
-        if let Ok(value) = serde_json::to_string(&products) {
-            let _: redis::RedisResult<()> = connection.set_ex(&key, value, 60).await;
-        }
-    }
-    Ok(Json(products))
+    catalog_cache::get(&state, &resource, async {
+        sqlx::query_as::<_, Product>(&format!(
+            "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) AND sold=$2 ORDER BY id"
+        )).bind(query.category).bind(query.sold).fetch_all(&state.db).await.map_err(internal)
+    }).await.map(Json)
 }
 async fn product(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<Product>, ApiError> {
-    sqlx::query_as::<_, Product>(&format!(
-        "SELECT {PRODUCT_COLUMNS} FROM products WHERE id = $1"
-    ))
-    .bind(id)
-    .fetch_optional(&state.db)
+    catalog_cache::get(&state, &format!("product:{id}"), async {
+        sqlx::query_as::<_, Product>(&format!(
+            "SELECT {PRODUCT_COLUMNS} FROM products WHERE id = $1"
+        ))
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "Product not found"))
+    })
     .await
-    .map_err(internal)?
     .map(Json)
-    .ok_or((StatusCode::NOT_FOUND, "Product not found"))
 }
+
 async fn ready(State(state): State<AppState>) -> Result<&'static str, ApiError> {
     sqlx::query("SELECT 1")
         .execute(&state.db)

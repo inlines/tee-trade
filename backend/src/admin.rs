@@ -554,6 +554,10 @@ async fn save_settings(
         return Err(bad("Недопустимые категории витрины"));
     }
     let mut tx = state.db.begin().await.map_err(internal)?;
+    sqlx::query("SELECT id FROM catalog_revision FOR UPDATE")
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(internal)?;
     sqlx::query("SELECT id FROM storefront FOR UPDATE")
         .fetch_one(&mut *tx)
         .await
@@ -585,25 +589,34 @@ async fn save_settings(
         .execute(&mut *tx)
         .await
         .map_err(internal)?;
+    sqlx::query("UPDATE catalog_revision SET version = version + 1")
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?;
     tx.commit().await.map_err(internal)?;
     Ok(Json(settings))
 }
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Storefront {
     settings: StorefrontSettings,
     carousel: Vec<Product>,
     featured: Vec<Product>,
 }
 pub async fn storefront(State(state): State<AppState>) -> Result<Json<Storefront>, ApiError> {
-    let Json(settings) = self::settings(State(state.clone())).await?;
-    let carousel = selected_products(&state.db, &settings.carousel_product_ids).await?;
-    let featured = selected_products(&state.db, &settings.featured_product_ids).await?;
-    Ok(Json(Storefront {
-        settings,
-        carousel,
-        featured,
-    }))
+    crate::catalog_cache::get(&state, "storefront", async {
+        let Json(settings) = self::settings(State(state.clone())).await?;
+        let carousel = selected_products(&state.db, &settings.carousel_product_ids).await?;
+        let featured = selected_products(&state.db, &settings.featured_product_ids).await?;
+        Ok(Storefront {
+            settings,
+            carousel,
+            featured,
+        })
+    })
+    .await
+    .map(Json)
 }
+
 async fn selected_products(db: &PgPool, ids: &[i32]) -> Result<Vec<Product>, ApiError> {
     sqlx::query_as::<_, Product>(&format!(
         "SELECT {PRODUCT_COLUMNS} FROM products WHERE id = ANY($1) AND NOT sold ORDER BY array_position($1, id)"
