@@ -1,12 +1,12 @@
 {
   "uid": "tee-trade-business",
-  "title": "Tee Trade — бизнес и конверсии",
+  "title": "FUTBA — бизнес и конверсии",
   "schemaVersion": 39,
   "version": 2,
   "refresh": "30s",
   "timezone": "browser",
   "tags": [
-    "tee-trade"
+    "futba"
   ],
   "time": {
     "from": "now-7d",

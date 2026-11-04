@@ -4,7 +4,7 @@ from pathlib import Path
 OUT=Path(__file__).resolve().parents[1]/'infra/grafana/dashboards'
 DS={'type':'prometheus','uid':'prometheus'}
 def dashboard(uid,title,period='now-6h'):
- return {'uid':uid,'title':title,'schemaVersion':39,'version':2,'refresh':'30s','timezone':'browser','tags':['tee-trade'],'time':{'from':period,'to':'now'},'templating':{'list':[]},'panels':[],'links':[{'title':'API','url':'/d/tee-trade-api','type':'link'},{'title':'PostgreSQL','url':'/d/tee-trade-postgres','type':'link'},{'title':'Бизнес','url':'/d/tee-trade-business','type':'link'}]}
+ return {'uid':uid,'title':title,'schemaVersion':39,'version':2,'refresh':'30s','timezone':'browser','tags':['futba'],'time':{'from':period,'to':'now'},'templating':{'list':[]},'panels':[],'links':[{'title':'API','url':'/d/tee-trade-api','type':'link'},{'title':'PostgreSQL','url':'/d/tee-trade-postgres','type':'link'},{'title':'Бизнес','url':'/d/tee-trade-business','type':'link'}]}
 def panel(d,title,exprs,x,y,w=12,h=8,kind='timeseries',unit='short',desc='',thresholds=None):
  if isinstance(exprs,str):exprs=[(exprs,title)]
  p={'id':len(d['panels'])+1,'title':title,'description':desc,'type':kind,'datasource':DS,'gridPos':{'x':x,'y':y,'w':w,'h':h},
@@ -40,7 +40,7 @@ def status(d,title,expr,x,y):
  p=panel(d,title,expr,x,y,6,4,'stat',thresholds=[{'color':'red','value':None},{'color':'green','value':1}])
  p['fieldConfig']['defaults']['mappings']=[{'type':'value','options':{'0':{'text':'НЕДОСТУПНО','color':'red'},'1':{'text':'OK','color':'green'}}}]
  return p
-api=dashboard('tee-trade-api','Tee Trade — здоровье API')
+api=dashboard('tee-trade-api','FUTBA — здоровье API')
 api['templating']['list']=[{'name':'route','label':'Маршрут API','type':'query','datasource':DS,'query':'label_values(http_request_duration_seconds_count{route=~"/api/.*"}, route)','refresh':1,'includeAll':True,'allValue':'.*','multi':True,'current':{'text':'All','value':'$__all'}}]
 status(api,'API / сбор метрик','up{job="tee-trade-api"}',0,0)
 status(api,'PostgreSQL из приложения','tee_dependency_up{dependency="postgres"}',6,0)
@@ -64,7 +64,7 @@ panel(api,'Пул соединений приложения','tee_db_pool_connec
 panel(api,'Время сбора метрик API','scrape_duration_seconds{job="tee-trade-api"}',12,40,unit='s')
 note(api,'API-метрики исключают health-check и scrape из нагрузки по маршрутам. Счётчики перезапускаются вместе с API; rate учитывает сбросы. Для анализа ошибок сопоставляйте 5xx, задержки и доступность зависимостей.',48)
 save(api,'api.json')
-db=dashboard('tee-trade-postgres','Tee Trade — здоровье PostgreSQL')
+db=dashboard('tee-trade-postgres','FUTBA — здоровье PostgreSQL')
 db['templating']['list']=[{'name':'database','label':'База','type':'query','datasource':DS,'query':'label_values(pg_database_size_bytes{datname!~"template.*|postgres"}, datname)','refresh':1,'multi':False,'includeAll':False}]
 status(db,'PostgreSQL','pg_up',0,0)
 status(db,'Exporter доступен','up{job="tee-trade-postgres"}',6,0)
@@ -86,7 +86,7 @@ panel(db,'Изменения строк',[(f'sum(rate(pg_stat_database_tup_{n}{{
 panel(db,'Autovacuum по таблицам','sum by(relname)(increase(pg_stat_user_tables_autovacuum_count{datname="$database"}[$__range]))',12,40,kind='bargauge')
 note(db,'Метрики поступают от отдельного postgres-exporter внутри Docker. Здесь нет показателя свободного места на диске VPS: размер базы не равен свободному месту диска. pg_stat_* — накопительная статистика PostgreSQL; значения могут сбрасываться при перезапуске/сбросе статистики.',48)
 save(db,'postgres.json')
-biz=dashboard('tee-trade-business','Tee Trade — бизнес и конверсии','now-7d')
+biz=dashboard('tee-trade-business','FUTBA — бизнес и конверсии','now-7d')
 biz['templating']['list']=[{'name':'window','label':'Окно показателей','type':'custom','query':'24h,7d,30d,90d','current':{'text':'7d','value':'7d'},'options':[{'text':w,'value':w,'selected':w=='7d'} for w in ['24h','7d','30d','90d']]}]
 note(biz,'**Карточки показывают скользящее окно $window на текущий момент**, независимо от диапазона графиков в правом верхнем углу. Обновление данных — раз в минуту. Просмотр = открытие карточки; повторы одного посетителя и товара в одном 30-минутном интервале исключаются. Просмотры администратора и демотоваров из интерфейса не отправляются. Анонимные посетители определяются cookie, не являются точным числом людей.',0,4)
 status(biz,'Сбор бизнес-данных','tee_business_collection_success',0,4)

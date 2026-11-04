@@ -1,5 +1,5 @@
 <section class="admin-page">
-  <div class="admin-heading"><div><p class="eyebrow">TEE TRADE / УПРАВЛЕНИЕ</p><h1>Администратор</h1></div>
+  <div class="admin-heading"><div><p class="eyebrow">FUTBA / УПРАВЛЕНИЕ</p><h1>Администратор</h1></div>
     @if (api.session(); as session) { <div class="account"><span>{{ session.username }}</span><button class="button" (click)="logout()" [disabled]="busy() || uploading()">Выйти</button></div> }
   </div>
   @if (checking()) { <p class="status" role="status">Проверяем сессию…</p> }

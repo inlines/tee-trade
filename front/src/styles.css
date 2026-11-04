@@ -166,18 +166,13 @@ h3 {
 }
 
 .wordmark {
-  font-size:32px;
-  font-weight:900;
-  letter-spacing:-2px;
-  white-space:nowrap;
+  display:inline-flex;
+  align-items:center;
+  flex-shrink:0;
+  line-height:1;
 }
-
-.wordmark span {
-  font-size:12px;
-  vertical-align:top;
-  margin-left:4px;
-  letter-spacing:0;
-}
+.wordmark img { display:block; width:184px; height:auto; }
+.about-mark img { width:min(100%,348px); height:auto; }
 
 .header-main nav {
   display:flex;
@@ -647,8 +642,9 @@ dd {
 }
 
 footer {
-  background:var(--ink);
-  color:var(--paper);
+  background:var(--paper);
+  color:var(--ink);
+  border-top:1px solid var(--line);
   padding:38px 4vw;
   display:flex;
   align-items:center;
@@ -664,7 +660,7 @@ footer p,footer nav,footer>span {
 }
 
 footer p {
-  color:#b9beb2;
+  color:var(--muted);
 }
 
 footer nav {
@@ -674,7 +670,7 @@ footer nav {
 }
 
 footer>span {
-  color:#b9beb2;
+  color:var(--muted);
   white-space:nowrap;
 }
 
@@ -1030,3 +1026,5 @@ app-root,main,.home-content,.gallery,.product-info,.header-main nav,app-product-
   footer { min-width:0; }
   .button { max-width:100%; gap:16px; }
 }
+
+@media(max-width:700px) { .wordmark img { width:150px; } }

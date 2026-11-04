@@ -15,7 +15,7 @@ import { CustomerService } from './customer.service';
       <button class="text-link account-logout" (click)="logout()" [disabled]="busy()">Выйти</button>
       <app-request-list />
     } @else {
-      <p class="eyebrow">TEE TRADE / АККАУНТ</p>
+      <p class="eyebrow">FUTBA / АККАУНТ</p>
       <h1>{{ mode() === 'register' ? 'Регистрация' : 'Вход' }}</h1>
       <div class="account-switch" aria-label="Вход или регистрация">
         <button type="button" [class.active]="mode() === 'register'" [attr.aria-pressed]="mode() === 'register'" (click)="switchMode('register')" [disabled]="busy()">Регистрация</button>
