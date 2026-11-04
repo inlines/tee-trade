@@ -84,6 +84,63 @@ async fn products(
         )).bind(query.category).bind(query.sold).fetch_all(&state.db).await.map_err(internal)
     }).await.map(Json)
 }
+#[derive(Deserialize)]
+struct PageQuery {
+    category: Option<String>,
+    #[serde(default)]
+    sold: bool,
+    limit: i64,
+    #[serde(default)]
+    offset: i64,
+    #[serde(default)]
+    sort: String,
+}
+#[derive(Serialize, Deserialize)]
+struct ProductPage {
+    items: Vec<Product>,
+    total: i64,
+}
+async fn product_page(
+    State(state): State<AppState>,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<ProductPage>, ApiError> {
+    if ![4, 8].contains(&query.limit) || query.offset < 0 || query.offset > 1_000_000 {
+        return Err((StatusCode::BAD_REQUEST, "Invalid pagination"));
+    }
+    if query
+        .category
+        .as_ref()
+        .is_some_and(|c| !CATEGORIES.contains(&c.as_str()))
+    {
+        return Err((StatusCode::BAD_REQUEST, "Unknown category"));
+    }
+    let order = match query.sort.as_str() {
+        "" | "default" => "id ASC",
+        "price-asc" => "price_cents ASC NULLS LAST, id ASC",
+        "price-desc" => "price_cents DESC NULLS LAST, id ASC",
+        "year" => "release_year DESC NULLS LAST, id ASC",
+        _ => return Err((StatusCode::BAD_REQUEST, "Unknown sort")),
+    };
+    let key = format!(
+        "page:{}:{}:{}:{}:{}",
+        query.sold,
+        query.category.as_deref().unwrap_or("all"),
+        query.limit,
+        query.offset,
+        order
+    );
+    catalog_cache::get(&state, &key, async {
+        let mut tx = state.db.begin().await.map_err(internal)?;
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY").execute(&mut *tx).await.map_err(internal)?;
+        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2")
+            .bind(&query.category).bind(query.sold).fetch_one(&mut *tx).await.map_err(internal)?;
+        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 ORDER BY {order} LIMIT $3 OFFSET $4"))
+            .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).fetch_all(&mut *tx).await.map_err(internal)?;
+        tx.commit().await.map_err(internal)?;
+        Ok(ProductPage {items, total})
+    }).await.map(Json)
+}
+
 async fn product(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -198,6 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/media/{id}", get(admin::media))
         .route("/api/media/{id}/preview", get(admin::media_preview))
         .route("/api/products", get(products))
+        .route("/api/products/page", get(product_page))
         .route("/api/products/{id}", get(product))
         .route("/health", get(|| async { "ok" }))
         .route("/ready", get(ready))

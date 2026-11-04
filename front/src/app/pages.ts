@@ -1,11 +1,12 @@
+import { CatalogEnd } from './catalog-end';
 import { ProgressiveImage } from './progressive-image';
 import { RequestsService } from './requests.service';
 import { RequestDialog } from './request-dialog';
-import { Component, computed, inject, signal, effect } from '@angular/core';
+import { Component, computed, inject, signal, effect, DestroyRef, untracked } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { combineLatest, map, of, startWith, Subject, switchMap } from 'rxjs';
+import { combineLatest, map, of, startWith, Subject, switchMap, Subscription } from 'rxjs';
 import { CatalogService, categories, categoryName, loadState, LoadState, Product, previewUrl } from './catalog';
 import { AdminService } from './admin.service';
 import { ChatService } from './chat.service';
@@ -45,17 +46,19 @@ export class HomePage {
 }
 
 @Component({
-  selector: 'app-catalog', imports: [RouterLink, RouterLinkActive, ProductCard],
+  selector: 'app-catalog', imports: [RouterLink, RouterLinkActive, ProductCard, CatalogEnd],
   template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / {{ archived ? 'АРХИВ' : 'КАТАЛОГ' }}</p><h1>{{ title() }}</h1></section>
     @if(!archived){<nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
       @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>}
     @if (!validCategory()) { <div class="status"><h2>Такой категории нет</h2><a routerLink="/catalog" class="text-link">Перейти ко всем вещам →</a></div> }
-    @else if (state(); as state) {
-      @if (state.loading) { <p class="status" role="status">Загружаем вещи…</p> }
-      @else if (state.error) { <div class="status" role="alert"><p>{{ state.error }}</p><button class="button" (click)="retry.next()">Повторить</button></div> }
+    @else {
+      @if (loading() && !items().length) { <p class="status" role="status">Загружаем вещи…</p> }
       @else {
-        <div class="catalog-toolbar"><p>Позиций: {{ state.data?.length ?? 0 }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option><option value="year">По году выпуска</option></select></label></div>
-        <div class="product-grid">@for (product of sorted(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" /> } @empty { <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> }</div>
+        <div class="catalog-toolbar"><p>Позиций: {{ total() }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option><option value="year">По году выпуска</option></select></label></div>
+        <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" /> } @empty { @if(!error()){ <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
+        @if (loading()) { <p class="status" role="status">Загружаем вещи…</p> }
+        @else if (error()) { <div class="status" role="alert"><p>{{error()}}</p><button class="button" (click)="loadMore()">Повторить</button></div> }
+        @else if (hasMore()) { <app-catalog-end (reached)="loadMore()" /> }
         @if (hasDemo()) { <p class="demo-note">Демо-коллекция: товары и иллюстрации показывают устройство каталога. Фотографии реальных вещей будут добавлены отдельно.</p> }
       }
     }`,
@@ -68,24 +71,39 @@ export class CatalogPage {
   readonly validCategory = computed(() => !this.category() || categories.some(category => category.slug === this.category()));
   readonly archived = this.route.snapshot.data['archive']===true;
   readonly title = computed(() => this.archived ? 'Архив' : this.validCategory() ? (this.category() ? categoryName(this.category()) : 'Каталог') : 'Категория не найдена');
-  readonly retry = new Subject<void>();
-  readonly state = toSignal(combineLatest([this.route.paramMap, this.retry.pipe(startWith(undefined))]).pipe(
-    switchMap(([params]) => {
-      const category = params.get('category') ?? '';
-      return !category || categories.some(item => item.slug === category) ? loadState(this.api.list(category,this.archived)) : of<LoadState<Product[]>>({ loading: false, data: [], error: '', notFound: true });
-    }),
-  ));
+  readonly items = signal<Product[]>([]);
+  readonly total = signal(0);
+  readonly loading = signal(false);
+  readonly error = signal('');
+  readonly hasMore = signal(true);
   readonly sort = signal('default');
-  readonly hasDemo = computed(() => this.state()?.data?.some(product => product.is_demo));
-  readonly sorted = computed(() => {
-    const products = [...(this.state()?.data ?? [])];
-    switch (this.sort()) {
-      case 'price-asc': return products.sort((a, b) => (a.price_cents ?? Infinity) - (b.price_cents ?? Infinity));
-      case 'price-desc': return products.sort((a, b) => (b.price_cents ?? -1) - (a.price_cents ?? -1));
-      case 'year': return products.sort((a, b) => (b.release_year ?? 0) - (a.release_year ?? 0));
-      default: return products;
-    }
-  });
+  readonly hasDemo = computed(() => this.items().some(product => product.is_demo));
+  private offset = 0;
+  private request?: Subscription;
+  constructor() {
+    effect(() => {
+      this.category(); this.sort();
+      untracked(() => {
+        this.request?.unsubscribe(); this.items.set([]); this.offset=0;
+        this.total.set(0); this.hasMore.set(true); this.loading.set(false); this.error.set('');
+        if(this.validCategory()) this.loadMore();
+      });
+    });
+    inject(DestroyRef).onDestroy(()=>this.request?.unsubscribe());
+  }
+  loadMore() {
+    if(this.loading() || !this.hasMore()) return;
+    this.loading.set(true); this.error.set('');
+    const limit=window.matchMedia('(max-width:700px)').matches?4:8;
+    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset).subscribe({
+      next: page => {
+        this.offset+=page.items.length;
+        this.items.update(items=>{const ids=new Set(items.map(p=>p.id));return [...items,...page.items.filter(p=>!ids.has(p.id))];});
+        this.total.set(page.total); this.hasMore.set(page.items.length>0 && this.offset<page.total); this.loading.set(false);
+      },
+      error: () => { this.error.set('Не удалось загрузить товары. Попробуйте ещё раз.'); this.loading.set(false); }
+    });
+  }
   setSort(event: Event) { this.sort.set((event.target as HTMLSelectElement).value); }
 }
 

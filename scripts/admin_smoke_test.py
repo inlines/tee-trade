@@ -101,6 +101,27 @@ try:
     request(f"/api/admin/products/{empty['id']}", 'PUT', {})
     request(f"/api/admin/products/{empty['id']}", 'DELETE', expected=204)
     print('PASS: create, retrieve and edit an entirely empty product')
+    paging_ids = []
+    for i in range(10):
+        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'price_cents':(10-i)*100, 'release_year':2000+i}, 201)
+        paging_ids.append(item['id']); created_products.append(item['id'])
+    for sort, key in [('default',lambda p:(p['id'],)), ('price-asc',lambda p:(p['price_cents'] is None,p['price_cents'] or 0,p['id'])), ('price-desc',lambda p:(p['price_cents'] is None,-(p['price_cents'] or 0),p['id'])), ('year',lambda p:(p['release_year'] is None,-(p['release_year'] or 0),p['id']))]:
+        expected = sorted(request('/api/products?category=hoodies',auth=False)[0],key=key)
+        for size in [4,8]:
+            loaded=[]
+            for offset in range(0,len(expected)+size,size):
+                page,_=request(f'/api/products/page?category=hoodies&limit={size}&offset={offset}&sort={sort}',auth=False)
+                assert page['total']==len(expected)
+                assert page['items']==expected[offset:offset+size]
+                loaded.extend(page['items'])
+            assert loaded==expected
+    for query in ['limit=3','limit=8&offset=-1','limit=8&sort=invalid','limit=8&category=invalid']:
+        request('/api/products/page?'+query,expected=400,auth=False)
+    request(f'/api/admin/products/{paging_ids[0]}/archive','POST',{})
+    assert paging_ids[0] not in [p['id'] for p in request('/api/products/page?category=hoodies&limit=8',auth=False)[0]['items']]
+    assert paging_ids[0] in [p['id'] for p in request('/api/products/page?category=hoodies&sold=true&limit=8&sort=price-asc',auth=False)[0]['items']]
+    for pid in paging_ids: request(f'/api/admin/products/{pid}','DELETE',expected=204)
+    print('PASS: 4/8 item pages, stable global sorting, limits, archive and page cache invalidation')
     main_url = upload(png(800,600))
     label_url = upload(png())
     for _ in range(4): upload(png(800,600))
