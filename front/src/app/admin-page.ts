@@ -8,7 +8,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AdminService, ProductDraft, StorefrontSettings } from './admin.service';
 import { ChatService } from './chat.service';
-import { Product, ProductImage, categories } from './catalog';
+import { Product, ProductImage, categories, previewUrl } from './catalog';
 
 @Component({
   selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList],
@@ -29,10 +29,10 @@ export class AdminPage {
   readonly uploadProgress = signal('');
   readonly error = signal('');
   readonly notice = signal('');
-  readonly tab = signal<'products' | 'storefront' | 'requests'>('products');
+  readonly tab = signal<'products' | 'archive' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
   readonly search = signal('');
-  readonly filtered = computed(() => this.products().filter(p => `${p.name} ${p.brand}`.toLowerCase().includes(this.search().toLowerCase())));
+  readonly filtered = computed(() => this.products().filter(p => p.sold === (this.tab() === 'archive')).filter(p => `${p.name} ${p.brand}`.toLowerCase().includes(this.search().toLowerCase())));
   readonly editor = signal(false);
   readonly editId = signal<number | null>(null);
   readonly images = signal<ProductImage[]>([]);
@@ -45,7 +45,7 @@ export class AdminPage {
 
   readonly queryParams=toSignal(this.route.queryParamMap);
   constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});void this.initialize(); }
-  selectTab(tab:'products'|'storefront') {
+  selectTab(tab:'products'|'archive'|'storefront') {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
   }
@@ -66,7 +66,8 @@ export class AdminPage {
     const requestedId = this.route.snapshot.queryParamMap.get('edit');
     if (requestedId !== null) {
       const product = products.find(item => item.id === Number(requestedId));
-      if (product) this.startEdit(product);
+      if (product?.sold) this.tab.set('archive');
+      else if (product) this.startEdit(product);
       else this.error.set('Товар для редактирования не найден.');
     }
   }
@@ -164,13 +165,24 @@ export class AdminPage {
       const product = await this.api.saveProduct(this.editId(), { ...this.draft, price_cents:this.price == null ? null : Math.round(price * 100), images:this.images() });
       this.products.update(products => [product, ...products.filter(p => p.id !== product.id)]);
       this.editId.set(product.id); this.draft = { ...product }; this.dirtyProduct.set(false);
+      if (product.sold) { this.editor.set(false); this.tab.set('archive'); }
       this.notice.set(product.sold?'Товар сохранён в архиве.':'Товар сохранён и доступен в каталоге.');
+    } catch (error) { this.handleError(error); }
+    finally { this.busy.set(false); }
+  }
+  async archiveProduct(product: Product) {
+    if (this.busy() || this.uploading() || product.sold) return;
+    this.busy.set(true); this.error.set(''); this.notice.set('');
+    try {
+      const archived = await this.api.archiveProduct(product.id);
+      this.products.update(products => products.map(item => item.id === archived.id ? archived : item));
+      this.notice.set('Товар перенесён в архив и больше не отображается в каталоге.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
   }
   async deleteProduct(product: Product) {
     if (this.busy() || this.uploading()) return;
-    if (!window.confirm(`Удалить товар «${product.name}»? Он будет удалён из каталога и подборок на главной. Это действие нельзя отменить.`)) return;
+    if (!window.confirm(`Удалить товар «${product.name}»? Будут удалены его фотографии, чаты, сообщения, заявки и история просмотров. Фото, используемые другими товарами, сохранятся. Это действие нельзя отменить.`)) return;
     this.busy.set(true); this.error.set(''); this.notice.set('');
     try {
       await this.api.deleteProduct(product.id);
@@ -186,12 +198,12 @@ export class AdminPage {
       if (this.editId() === product.id) {
         this.editor.set(false); this.editId.set(null); this.images.set([]); this.dirtyProduct.set(false);
       }
-      this.notice.set('Товар удалён из каталога и витрины.');
+      this.notice.set('Товар и связанные с ним данные удалены.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
   }
   productName(id: number) { return this.products().find(product => product.id === id)?.name ?? `Товар №${id}`; }
-  productCover(product: Product) { return product.images.find(image => image.kind === 'front')?.url ?? product.images[0]?.url ?? '/images/no-photo.svg'; }
+  productCover(product: Product) { return previewUrl(product.images.find(image => image.kind === 'front')?.url ?? product.images[0]?.url ?? '/images/no-photo.svg'); }
   patchSettings<K extends keyof StorefrontSettings>(key: K, value: StorefrontSettings[K]) { this.settings.update(settings => settings ? { ...settings, [key]:value } : null); this.dirtySettings.set(true); }
   addSelection(key: 'carousel_product_ids' | 'featured_product_ids', value: string) {
     const id = Number(value); const selected = this.settings()?.[key] ?? [];

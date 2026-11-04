@@ -39,6 +39,7 @@ export class AdminService {
       ? this.http.post<Product>('/api/admin/products', draft, { headers: this.headers() })
       : this.http.put<Product>(`/api/admin/products/${id}`, draft, { headers: this.headers() }));
   }
+  archiveProduct(id: number) { return firstValueFrom(this.http.post<Product>(`/api/admin/products/${id}/archive`, {}, { headers: this.headers() })); }
   deleteProduct(id: number) { return firstValueFrom(this.http.delete<void>(`/api/admin/products/${id}`, { headers: this.headers() })); }
   saveSettings(settings: StorefrontSettings) { return firstValueFrom(this.http.put<StorefrontSettings>('/api/admin/storefront', settings, { headers: this.headers() })); }
   async upload(file: File, progress: (percent: number) => void = () => {}) {

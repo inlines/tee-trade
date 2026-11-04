@@ -12,15 +12,15 @@
       <button class="button dark" type="submit" [disabled]="busy() || loginForm.invalid">{{ busy() ? 'Входим…' : 'Войти' }}</button>
     </form>
   } @else {
-    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="selectTab('products')">Товары</button><button [class.active]="tab() === 'storefront'" (click)="selectTab('storefront')">Главная страница</button><button [class.active]="tab() === 'requests'" (click)="tab.set('requests')">Заявки</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
+    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="selectTab('products')">Товары</button><button [class.active]="tab() === 'archive'" (click)="selectTab('archive')">Архив</button><button [class.active]="tab() === 'storefront'" (click)="selectTab('storefront')">Главная страница</button><button [class.active]="tab() === 'requests'" (click)="tab.set('requests')">Заявки</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
     @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
     @if (notice()) { <p class="form-success" role="status">{{ notice() }}</p> }
     @if (tab() === 'requests') { <app-request-list [admin]="true" /> }
-    @if (tab() === 'products') {
-      @if (!editor()) {
-        <div class="admin-toolbar"><label>Поиск товара<input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label><button class="button dark" [disabled]="busy() || uploading()" (click)="startEdit()">Добавить товар +</button></div>
+    @if (tab() === 'products' || tab() === 'archive') {
+      @if (!editor() || tab() === 'archive') {
+        <div class="admin-toolbar"><label>Поиск товара<input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label>@if(tab() === 'products'){<button class="button dark" [disabled]="busy() || uploading()" (click)="startEdit()">Добавить товар +</button>}</div>
         <div class="admin-products">@for (product of filtered(); track product.id) {
-          <article class="admin-product"><img [src]="productCover(product)" [alt]="product.name" width="72" height="80"><div><h3>{{ product.name || 'Без названия' }}</h3>@if(product.sold){<span>Продано · Архив</span>}<p>{{ product.brand }} · {{ categoryName(product.category) }} · №{{ product.id }}</p></div><span>{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</span><button class="button" [disabled]="busy() || uploading()" (click)="startEdit(product)">Редактировать</button><button class="button danger" [disabled]="busy() || uploading()" [attr.aria-label]="'Удалить товар ‘' + product.name + '’'" (click)="deleteProduct(product)">Удалить</button></article>
+          <article class="admin-product"><img [src]="productCover(product)" [alt]="product.name" width="72" height="80" loading="lazy" decoding="async"><div><h3>{{ product.name || 'Без названия' }}</h3>@if(product.sold){<span>Продано · Архив</span>}<p>{{ product.brand }} · {{ categoryName(product.category) }} · №{{ product.id }}</p></div><span>{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</span>@if(tab() === 'products'){<button class="button" [disabled]="busy() || uploading()" (click)="startEdit(product)">Редактировать</button><button class="button" [disabled]="busy() || uploading()" (click)="archiveProduct(product)">Перенести в архив</button>}<button class="button danger" [disabled]="busy() || uploading()" [attr.aria-label]="'Удалить товар ‘' + product.name + '’'" (click)="deleteProduct(product)">Удалить</button></article>
         } @empty { <p class="status">Товары не найдены.</p> }</div>
       } @else {
         <div class="editor-heading"><h2>{{ editId() === null ? 'Новый товар' : 'Редактирование товара' }}</h2><button type="button" class="text-link" (click)="closeEditor()" [disabled]="busy() || uploading()">← К списку</button></div>

@@ -28,6 +28,11 @@ csrf = ''
 created_products = []
 created_media = []
 original_settings = None
+fixture_user = 'archive-' + uuid.uuid4().hex
+
+def sql(statement):
+    return subprocess.check_output(['docker', 'compose', 'exec', '-T', 'postgres', 'sh', '-c', 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -v ON_ERROR_STOP=1'], input=statement, text=True).strip()
+
 
 
 def request(path, method='GET', body=None, expected=200, auth=True, use_csrf=True, extra_headers=None):
@@ -194,7 +199,35 @@ try:
     shared_product, _ = request('/api/admin/products', 'POST', shared, 201)
     shared_id = shared_product['id']; created_products.append(shared_id)
     request('/api/products?category=accessories')  # Warm cache before deletion.
+    request(f'/api/admin/products/{product_id}/archive', 'POST', {}, 401, auth=False)
+    request(f'/api/admin/products/{product_id}/archive', 'POST', {}, 403, use_csrf=False)
+    archived, _ = request(f'/api/admin/products/{product_id}/archive', 'POST', {})
+    assert archived['sold'] and archived['name'] == product['name']
+    assert all(p['id'] != product_id for p in request('/api/products', auth=False)[0])
+    assert any(p['id'] == product_id for p in request('/api/products?sold=true', auth=False)[0])
+    assert all(p['id'] != product_id for p in request('/api/storefront', auth=False)[0]['carousel'])
+    sql(f"""
+      INSERT INTO customers(username,username_key,password_hash) VALUES ('{fixture_user}','{fixture_user}','fixture-only');
+      INSERT INTO chats(customer_id,product_id,product_name)
+        SELECT id,{product_id},'Archive test' FROM customers WHERE username='{fixture_user}';
+      INSERT INTO chat_messages(chat_id,is_admin,client_id,body)
+        SELECT id,false,'fixture','Test message' FROM chats WHERE product_id={product_id};
+      INSERT INTO purchase_requests(customer_id,chat_id,product_id,product_name,last_name,first_name,contact,city)
+        SELECT customer_id,id,product_id,product_name,'Test','Test','Test','Test' FROM chats WHERE product_id={product_id};
+      INSERT INTO purchase_request_events(request_id,for_admin,status)
+        SELECT id,true,'new' FROM purchase_requests WHERE product_id={product_id};
+      INSERT INTO product_views(product_id,visitor_hash,bucket) VALUES ({product_id},'fixture',now());
+    """)
+    chat_ids = sql(f'SELECT id FROM chats WHERE product_id={product_id}')
+    request_ids = sql(f'SELECT id FROM purchase_requests WHERE product_id={product_id}')
     request(f'/api/admin/products/{product_id}', 'DELETE', expected=204)
+    for table,condition in [
+        ('chats',f'product_id={product_id}'), ('purchase_requests',f'product_id={product_id}'),
+        ('product_views',f'product_id={product_id}'), ('chat_messages',f'chat_id IN ({chat_ids})'),
+        ('purchase_request_events',f'request_id IN ({request_ids})')]:
+        assert sql(f'SELECT count(*) FROM {table} WHERE {condition}') == '0', table
+    print('PASS: archive endpoint, public cache invalidation and complete related-data deletion')
+
     request(f'/api/products/{product_id}', expected=404, auth=False)
     request(label_url, expected=404, auth=False)
     request(main_url, auth=False)  # Shared photo must remain available.
@@ -236,6 +269,7 @@ finally:
             statements.append('UPDATE catalog_revision SET version = version + 1;')
         if created_media:
             statements.append('DELETE FROM media WHERE id IN (' + ','.join("'" + value + "'" for value in created_media) + ');')
+        statements.append(f"DELETE FROM customers WHERE username='{fixture_user}';")
         statements.append('COMMIT;')
         subprocess.run(['docker', 'compose', 'exec', '-T', 'postgres', 'sh', '-c', 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1'], input='\n'.join(statements), text=True, check=True, stdout=subprocess.DEVNULL)
         print('Temporary test records and images removed.')

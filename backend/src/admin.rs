@@ -89,6 +89,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
             "/api/admin/products/{id}",
             put(update).delete(delete_product),
         )
+        .route("/api/admin/products/{id}/archive", post(archive_product))
         .route("/api/admin/storefront", get(settings).put(save_settings))
         .route(
             "/api/admin/uploads",
@@ -329,6 +330,31 @@ async fn create(
     tx.commit().await.map_err(internal)?;
     Ok((StatusCode::CREATED, Json(product)))
 }
+async fn archive_product(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<Json<Product>, ApiError> {
+    let mut tx = state.db.begin().await.map_err(internal)?;
+    sqlx::query("SELECT id FROM catalog_revision FOR UPDATE")
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!(
+        "UPDATE products SET sold = TRUE WHERE id = $1 RETURNING {PRODUCT_COLUMNS}"
+    ))
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(internal)?
+    .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
+    sqlx::query("UPDATE catalog_revision SET version = version + 1")
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    Ok(Json(product))
+}
+
 async fn delete_product(
     State(state): State<AppState>,
     Path(id): Path<i32>,
