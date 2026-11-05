@@ -20,7 +20,9 @@ calls[1].observer.error();assert.equal(page.items().length,8);assert.ok(page.err
 page.loadMore();assert.equal(calls[2].args[4],8);calls[2].observer.next({items:[9,10,11,12].map(id=>({id})),total:12});
 assert.equal(page.items().map(p=>p.id).join(','),'1,2,3,4,5,6,7,8,9,10,11,12');assert.equal(page.hasMore(),false);
 page.loadMore();assert.equal(calls.length,3);
-mobile=true;category.set('hoodies');reset();assert.equal(page.items().length,0);assert.equal(calls[3].args.join('|'),'hoodies|false|default|4|0');
+mobile=true;category.set('hoodies');reset();assert.equal(page.items().length,0);assert.equal(calls[3].args.slice(0,5).join('|'),'hoodies|false|default|4|0');
+page.toggleBrand('Brand A');page.toggleBrand('Brand B');
+assert.equal(page.selectedBrands().join(','),'Brand A,Brand B');
 page.sort.set('price-desc');reset();assert.equal(calls[3].cancelled,true);assert.equal(calls[4].args[2],'price-desc');assert.equal(calls[4].args[4],0);
 destroy();assert.equal(calls[4].cancelled,true);
 console.log('PASS: append order, 8/4 page sizes, concurrent-load guard, retry without losing cards, filter/sort reset and cancellation');

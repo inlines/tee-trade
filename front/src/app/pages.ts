@@ -50,6 +50,14 @@ export class HomePage {
   template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / {{ archived ? 'АРХИВ' : 'КАТАЛОГ' }}</p><h1>{{ title() }}</h1></section>
     @if(!archived){<nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
       @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>}
+    <section class="brand-filter" aria-label="Фильтр по брендам">
+      <button class="brand-filter-toggle" type="button" [attr.aria-expanded]="brandsOpen()" aria-controls="catalog-brands" (click)="brandsOpen.set(!brandsOpen())">Бренды @if(selectedBrands().length){<span>({{selectedBrands().length}})</span>} <span aria-hidden="true">{{brandsOpen()?'−':'+'}}</span></button>
+      @if(brandsOpen()) { <div id="catalog-brands" class="brand-tags">
+        @for(brand of brands(); track brand) { <button type="button" class="brand-tag" [class.selected]="selectedBrands().includes(brand)" [attr.aria-pressed]="selectedBrands().includes(brand)" (click)="toggleBrand(brand)">{{brand}}</button> }
+        @if(!brands().length && !loading()){<p>В этой категории пока нет указанных брендов.</p>}
+        @if(selectedBrands().length){<button type="button" class="text-link" (click)="selectedBrands.set([])">Сбросить бренды</button>}
+      </div>}
+    </section>
     @if (!validCategory()) { <div class="status"><h2>Такой категории нет</h2><a routerLink="/catalog" class="text-link">Перейти ко всем вещам →</a></div> }
     @else {
       @if (loading() && !items().length) { <p class="status" role="status">Загружаем вещи…</p> }
@@ -71,6 +79,11 @@ export class CatalogPage {
   readonly validCategory = computed(() => !this.category() || categories.some(category => category.slug === this.category()));
   readonly archived = this.route.snapshot.data['archive']===true;
   readonly title = computed(() => this.archived ? 'Архив' : this.validCategory() ? (this.category() ? categoryName(this.category()) : 'Каталог') : 'Категория не найдена');
+  readonly brandsOpen = signal(false);
+  readonly brands = signal<string[]>([]);
+  readonly selectedBrands = signal<string[]>([]);
+  private lastCategory = '';
+  toggleBrand(brand:string) { this.selectedBrands.update(values=>values.includes(brand)?values.filter(value=>value!==brand):[...values,brand]); }
   readonly items = signal<Product[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
@@ -82,8 +95,9 @@ export class CatalogPage {
   private request?: Subscription;
   constructor() {
     effect(() => {
-      this.category(); this.sort();
+      const category=this.category(); this.sort(); this.selectedBrands();
       untracked(() => {
+        if(category!==this.lastCategory){ this.lastCategory=category; this.selectedBrands.set([]); this.brands.set([]); }
         this.request?.unsubscribe(); this.items.set([]); this.offset=0;
         this.total.set(0); this.hasMore.set(true); this.loading.set(false); this.error.set('');
         if(this.validCategory()) this.loadMore();
@@ -95,8 +109,9 @@ export class CatalogPage {
     if(this.loading() || !this.hasMore()) return;
     this.loading.set(true); this.error.set('');
     const limit=window.matchMedia('(max-width:700px)').matches?4:8;
-    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset).subscribe({
+    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset,this.selectedBrands()).subscribe({
       next: page => {
+        this.brands.set(page.brands);
         this.offset+=page.items.length;
         this.items.update(items=>{const ids=new Set(items.map(p=>p.id));return [...items,...page.items.filter(p=>!ids.has(p.id))];});
         this.total.set(page.total); this.hasMore.set(page.items.length>0 && this.offset<page.total); this.loading.set(false);

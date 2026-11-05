@@ -94,11 +94,13 @@ struct PageQuery {
     offset: i64,
     #[serde(default)]
     sort: String,
+    brands: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 struct ProductPage {
     items: Vec<Product>,
     total: i64,
+    brands: Vec<String>,
 }
 async fn product_page(
     State(state): State<AppState>,
@@ -114,6 +116,25 @@ async fn product_page(
     {
         return Err((StatusCode::BAD_REQUEST, "Unknown category"));
     }
+    let mut selected: Vec<String> = match query.brands.as_deref() {
+        Some(raw) => {
+            serde_json::from_str(raw).map_err(|_| (StatusCode::BAD_REQUEST, "Invalid brands"))?
+        }
+        None => Vec::new(),
+    };
+    if selected.len() > 50
+        || selected
+            .iter()
+            .any(|b| b.trim().is_empty() || b.chars().count() > 100)
+    {
+        return Err((StatusCode::BAD_REQUEST, "Invalid brands"));
+    }
+    selected = selected
+        .into_iter()
+        .map(|b| b.trim().to_lowercase())
+        .collect();
+    selected.sort();
+    selected.dedup();
     let order = match query.sort.as_str() {
         "" | "default" => "id ASC",
         "price-asc" => "price_cents ASC NULLS LAST, id ASC",
@@ -122,22 +143,26 @@ async fn product_page(
         _ => return Err((StatusCode::BAD_REQUEST, "Unknown sort")),
     };
     let key = format!(
-        "page:{}:{}:{}:{}:{}",
+        "page-brands:{}:{}:{}:{}:{}:{}",
         query.sold,
         query.category.as_deref().unwrap_or("all"),
         query.limit,
         query.offset,
-        order
+        order,
+        serde_json::to_string(&selected).map_err(internal)?
     );
     catalog_cache::get(&state, &key, async {
         let mut tx = state.db.begin().await.map_err(internal)?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY").execute(&mut *tx).await.map_err(internal)?;
-        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2")
-            .bind(&query.category).bind(query.sold).fetch_one(&mut *tx).await.map_err(internal)?;
-        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 ORDER BY {order} LIMIT $3 OFFSET $4"))
-            .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).fetch_all(&mut *tx).await.map_err(internal)?;
+        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR lower(btrim(brand)) = ANY($3))")
+            .bind(&query.category).bind(query.sold).bind(&selected).fetch_one(&mut *tx).await.map_err(internal)?;
+        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR lower(btrim(brand)) = ANY($5)) ORDER BY {order} LIMIT $3 OFFSET $4"))
+            .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).bind(&selected).fetch_all(&mut *tx).await.map_err(internal)?;
+        // Facet excludes its own selection and pagination, but respects every other filter.
+        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
+            .bind(&query.category).bind(query.sold).fetch_all(&mut *tx).await.map_err(internal)?;
         tx.commit().await.map_err(internal)?;
-        Ok(ProductPage {items, total})
+        Ok(ProductPage {items, total, brands})
     }).await.map(Json)
 }
 

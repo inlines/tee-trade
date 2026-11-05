@@ -13,6 +13,7 @@ import uuid
 from urllib.error import HTTPError
 from urllib.request import Request, build_opener, HTTPCookieProcessor
 import zlib
+from urllib.parse import urlencode
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:4200').rstrip('/')
 config = {}
@@ -103,7 +104,7 @@ try:
     print('PASS: create, retrieve and edit an entirely empty product')
     paging_ids = []
     for i in range(10):
-        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'price_cents':(10-i)*100, 'release_year':2000+i}, 201)
+        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brand':f'{fixture_user} Brand {i%2}', 'price_cents':(10-i)*100, 'release_year':2000+i}, 201)
         paging_ids.append(item['id']); created_products.append(item['id'])
     for sort, key in [('default',lambda p:(p['id'],)), ('price-asc',lambda p:(p['price_cents'] is None,p['price_cents'] or 0,p['id'])), ('price-desc',lambda p:(p['price_cents'] is None,-(p['price_cents'] or 0),p['id'])), ('year',lambda p:(p['release_year'] is None,-(p['release_year'] or 0),p['id']))]:
         expected = sorted(request('/api/products?category=hoodies',auth=False)[0],key=key)
@@ -115,6 +116,21 @@ try:
                 assert page['items']==expected[offset:offset+size]
                 loaded.extend(page['items'])
             assert loaded==expected
+    facet_base='/api/products/page?category=hoodies&limit=4&'
+    all_facets=request(facet_base,auth=False)[0]['brands']
+    brand_a=f'{fixture_user} Brand 0'; brand_b=f'{fixture_user} Brand 1'
+    for selected,expected_count in [([brand_a],5),([brand_a,brand_b],10),([brand_a.upper()],5),(['unknown-brand'],0)]:
+        page=request(facet_base+urlencode({'brands':json.dumps(selected)}),auth=False)[0]
+        assert page['total']==expected_count
+        assert page['brands']==all_facets, 'Brand selection must not shrink its own facet'
+        assert all(p['brand'].lower() in [b.lower() for b in selected] for p in page['items'])
+    other,_=request('/api/admin/products','POST',{'category':'sneakers','brand':fixture_user+' Other'},201)
+    created_products.append(other['id'])
+    assert fixture_user+' Other' not in request(facet_base,auth=False)[0]['brands']
+    assert brand_a not in request('/api/products/page?category=sneakers&limit=4',auth=False)[0]['brands']
+    request(f"/api/admin/products/{other['id']}",'DELETE',expected=204)
+    request(facet_base+urlencode({'brands':'not-json'}),expected=400,auth=False)
+    print('PASS: multi-brand OR filter, case-insensitivity, facet scope and cache isolation')
     for query in ['limit=3','limit=8&offset=-1','limit=8&sort=invalid','limit=8&category=invalid']:
         request('/api/products/page?'+query,expected=400,auth=False)
     request(f'/api/admin/products/{paging_ids[0]}/archive','POST',{})

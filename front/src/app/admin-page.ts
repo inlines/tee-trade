@@ -1,3 +1,4 @@
+import { BrandPicker } from './brand-picker';
 import { RequestList } from './request-list';
 import { effect } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -11,7 +12,7 @@ import { ChatService } from './chat.service';
 import { Product, ProductImage, categories, previewUrl } from './catalog';
 
 @Component({
-  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList],
+  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList, BrandPicker],
   templateUrl: './admin-page.html', styleUrl: './admin-page.css',
 })
 export class AdminPage {
@@ -31,6 +32,7 @@ export class AdminPage {
   readonly notice = signal('');
   readonly tab = signal<'products' | 'archive' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
+  readonly brands = computed(() => { const names = new Map<string,string>(); for(const product of this.products()){const brand=product.brand.trim();if(brand&&!names.has(brand.toLowerCase()))names.set(brand.toLowerCase(),brand);}return [...names.values()].sort((a,b)=>a.localeCompare(b)); });
   readonly search = signal('');
   readonly filtered = computed(() => this.products().filter(p => p.sold === (this.tab() === 'archive')).filter(p => `${p.name} ${p.brand}`.toLowerCase().includes(this.search().toLowerCase())));
   readonly editor = signal(false);
