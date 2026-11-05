@@ -29,6 +29,8 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/auth/requests", get(customer_list).post(create))
         .route("/api/admin/requests", get(admin_list))
+        .route("/api/admin/requests/page", get(admin_page))
+        .route("/api/admin/requests/{id}", get(admin_detail))
         .route("/api/admin/requests/{id}/status", post(change_status))
         .route("/api/admin/requests/{id}/chat", get(open_chat))
         .route("/api/admin/requests/events", get(admin_events))
@@ -72,6 +74,68 @@ async fn admin_list(
 ) -> Result<Json<Vec<PurchaseRequest>>, ApiError> {
     list(s, h, true).await
 }
+#[derive(Deserialize)]
+struct RequestPageQuery {
+    limit: i64,
+    #[serde(default)]
+    offset: i64,
+    #[serde(default)]
+    archive: bool,
+}
+#[derive(Serialize)]
+struct RequestPage {
+    items: Vec<PurchaseRequest>,
+    total: i64,
+    active: i64,
+    completed: i64,
+}
+async fn admin_page(
+    State(s): State<AppState>,
+    h: HeaderMap,
+    Query(q): Query<RequestPageQuery>,
+) -> Result<Json<RequestPage>, ApiError> {
+    chat::actor(&s, &h, true).await?;
+    if ![4, 8].contains(&q.limit) || q.offset < 0 || q.offset > 1_000_000 {
+        return Err((StatusCode::BAD_REQUEST, "Invalid pagination"));
+    }
+    let mut tx = s.db.begin().await.map_err(internal)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?;
+    let (active,completed):(i64,i64)=sqlx::query_as("SELECT count(*) FILTER(WHERE status<>'completed'),count(*) FILTER(WHERE status='completed') FROM purchase_requests").fetch_one(&mut *tx).await.map_err(internal)?;
+    let items = sqlx::query_as(&format!(
+        "{SELECT} WHERE (r.status='completed')=$1 ORDER BY r.id DESC LIMIT $2 OFFSET $3"
+    ))
+    .bind(q.archive)
+    .bind(q.limit)
+    .bind(q.offset)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    Ok(Json(RequestPage {
+        items,
+        total: if q.archive { completed } else { active },
+        active,
+        completed,
+    }))
+}
+async fn admin_detail(
+    State(s): State<AppState>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+) -> Result<Json<PurchaseRequest>, ApiError> {
+    chat::actor(&s, &h, true).await?;
+    sqlx::query_as(&format!("{SELECT} WHERE r.id=$1"))
+        .bind(id)
+        .fetch_optional(&s.db)
+        .await
+        .map_err(internal)?
+        .map(Json)
+        .ok_or((StatusCode::NOT_FOUND, "Заявка не найдена"))
+}
+
 #[derive(Deserialize)]
 struct Draft {
     product_id: i32,

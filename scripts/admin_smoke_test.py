@@ -116,6 +116,19 @@ try:
                 assert page['items']==expected[offset:offset+size]
                 loaded.extend(page['items'])
             assert loaded==expected
+    for size in [4,8]:
+        loaded=[]
+        for offset in range(0,12,size):
+            page=request('/api/admin/products/page?'+urlencode({'limit':size,'offset':offset,'search':fixture_user}),auth=True)[0]
+            assert page['total']==10
+            loaded.extend(p['id'] for p in page['items'])
+        assert loaded==list(reversed(paging_ids))
+    request('/api/admin/products/page?limit=8',expected=401,auth=False)
+    request('/api/admin/products/page?limit=100',expected=400)
+    assert request(f'/api/admin/products/{paging_ids[0]}')[0]['id']==paging_ids[0]
+    assert len(request('/api/admin/products/labels?'+urlencode({'ids':json.dumps(paging_ids)}))[0])==10
+    assert f'{fixture_user} Brand 0' in request('/api/admin/products/brands')[0]
+    print('PASS: admin 4/8 product pages, server search, detail, labels and brands independent of page')
     facet_base='/api/products/page?category=hoodies&limit=4&'
     all_facets=request(facet_base,auth=False)[0]['brands']
     brand_a=f'{fixture_user} Brand 0'; brand_b=f'{fixture_user} Brand 1'
@@ -255,8 +268,26 @@ try:
         SELECT id,true,'new' FROM purchase_requests WHERE product_id={product_id};
       INSERT INTO product_views(product_id,visitor_hash,bucket) VALUES ({product_id},'fixture',now());
     """)
+    sql(f"""INSERT INTO purchase_requests(customer_id,chat_id,product_id,product_name,last_name,first_name,contact,city,status)
+      SELECT c.customer_id,c.id,c.product_id,c.product_name,'Test','Test','Test','Test','completed'
+      FROM chats c CROSS JOIN generate_series(1,10) n WHERE c.product_id={product_id};""")
+    for archived in ['false','true']:
+        expected_ids=sql("SELECT id FROM purchase_requests WHERE (status='completed')="+archived+" ORDER BY id DESC").splitlines()
+        for size in [4,8]:
+            loaded=[]
+            for offset in range(0,len(expected_ids)+size,size):
+                page=request(f'/api/admin/requests/page?archive={archived}&limit={size}&offset={offset}')[0]
+                assert page['total']==len(expected_ids)
+                loaded.extend(str(r['id']) for r in page['items'])
+            assert loaded==expected_ids
+    request('/api/admin/requests/page?limit=8',expected=401,auth=False)
+    request('/api/admin/requests/page?limit=100',expected=400)
+    first_id=int(sql(f'SELECT min(id) FROM purchase_requests WHERE product_id={product_id}'))
+    assert request(f'/api/admin/requests/{first_id}')[0]['id']==first_id
+    request(f'/api/admin/requests/{first_id}',expected=401,auth=False)
+    print('PASS: admin request pages, active/archive counts and direct detail outside loaded page')
     chat_ids = sql(f'SELECT id FROM chats WHERE product_id={product_id}')
-    request_ids = sql(f'SELECT id FROM purchase_requests WHERE product_id={product_id}')
+    request_ids = ','.join(sql(f'SELECT id FROM purchase_requests WHERE product_id={product_id}').splitlines())
     request(f'/api/admin/products/{product_id}', 'DELETE', expected=204)
     for table,condition in [
         ('chats',f'product_id={product_id}'), ('purchase_requests',f'product_id={product_id}'),

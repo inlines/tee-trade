@@ -1,8 +1,9 @@
+import { CatalogEnd } from './catalog-end';
 import { BrandPicker } from './brand-picker';
 import { RequestList } from './request-list';
-import { effect } from '@angular/core';
+import { effect, untracked, DestroyRef } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -12,7 +13,7 @@ import { ChatService } from './chat.service';
 import { Product, ProductImage, categories, previewUrl } from './catalog';
 
 @Component({
-  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList, BrandPicker],
+  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList, BrandPicker, CatalogEnd],
   templateUrl: './admin-page.html', styleUrl: './admin-page.css',
 })
 export class AdminPage {
@@ -32,9 +33,30 @@ export class AdminPage {
   readonly notice = signal('');
   readonly tab = signal<'products' | 'archive' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
-  readonly brands = computed(() => { const names = new Map<string,string>(); for(const product of this.products()){const brand=product.brand.trim();if(brand&&!names.has(brand.toLowerCase()))names.set(brand.toLowerCase(),brand);}return [...names.values()].sort((a,b)=>a.localeCompare(b)); });
+  readonly brands = signal<string[]>([]);
   readonly search = signal('');
-  readonly filtered = computed(() => this.products().filter(p => p.sold === (this.tab() === 'archive')).filter(p => `${p.name} ${p.brand}`.toLowerCase().includes(this.search().toLowerCase())));
+  readonly filtered = this.products;
+  readonly listLoading=signal(false);
+  readonly listError=signal('');
+  readonly hasMore=signal(true);
+  readonly total=signal(0);
+  private offset=0;
+  private listGeneration=0;
+  private names = signal(new Map<number,string>());
+  async resetProducts(){this.listGeneration++;this.offset=0;this.products.set([]);this.total.set(0);this.hasMore.set(true);this.listLoading.set(false);this.listError.set('');if(this.api.session()&&this.tab()!=='requests')await this.loadMore();}
+  async loadMore(){
+    if(this.listLoading()||!this.hasMore())return;
+    const generation=this.listGeneration;
+    this.listLoading.set(true);this.listError.set('');
+    try{
+      const page=await this.api.page(this.search(),this.tab()==='archive',window.matchMedia('(max-width:700px)').matches?4:8,this.offset);
+      if(generation!==this.listGeneration)return;
+      this.offset+=page.items.length;this.total.set(page.total);this.hasMore.set(page.items.length>0&&this.offset<page.total);
+      this.products.update(rows=>{const ids=new Set(rows.map(p=>p.id));return [...rows,...page.items.filter(p=>!ids.has(p.id))];});
+      this.names.update(names=>{const next=new Map(names);page.items.forEach(p=>next.set(p.id,p.name));return next;});
+    }catch(e){if(generation===this.listGeneration)this.listError.set('Не удалось загрузить товары. Попробуйте ещё раз.');}
+    finally{if(generation===this.listGeneration)this.listLoading.set(false);}
+  }
   readonly editor = signal(false);
   readonly editId = signal<number | null>(null);
   readonly images = signal<ProductImage[]>([]);
@@ -43,10 +65,9 @@ export class AdminPage {
   readonly dirtySettings = signal(false);
   username = ''; password = ''; price: number | null = null;
   draft: ProductDraft = this.emptyDraft();
-  carouselChoice = ''; featuredChoice = '';
 
   readonly queryParams=toSignal(this.route.queryParamMap);
-  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});void this.initialize(); }
+  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});effect(()=>{this.api.session();this.tab();this.search();untracked(()=>void this.resetProducts());});inject(DestroyRef).onDestroy(()=>this.listGeneration++);void this.initialize(); }
   selectTab(tab:'products'|'archive'|'storefront') {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
@@ -58,8 +79,10 @@ export class AdminPage {
     finally { this.checking.set(false); }
   }
   private async load() {
-    const [products, settings] = await Promise.all([this.api.list(), this.api.settings()]);
-    this.products.set(products); this.settings.set(settings);
+    const [brands, settings] = await Promise.all([this.api.brands(), this.api.settings()]);
+    this.brands.set(brands); this.settings.set(settings);
+    const labels=await this.api.labels([...new Set([...settings.carousel_product_ids,...settings.featured_product_ids])]);
+    this.names.update(names=>{const next=new Map(names);labels.forEach(p=>next.set(p.id,p.name));return next;});
     const chatId = this.route.snapshot.queryParamMap.get('chat');
     if(chatId){
       const chat=(await this.chatApi.list(true)).find(chat=>chat.id===Number(chatId));
@@ -67,7 +90,7 @@ export class AdminPage {
     }
     const requestedId = this.route.snapshot.queryParamMap.get('edit');
     if (requestedId !== null) {
-      const product = products.find(item => item.id === Number(requestedId));
+      const product = await this.api.product(Number(requestedId));
       if (product?.sold) this.tab.set('archive');
       else if (product) this.startEdit(product);
       else this.error.set('Товар для редактирования не найден.');
@@ -168,6 +191,7 @@ export class AdminPage {
       this.products.update(products => [product, ...products.filter(p => p.id !== product.id)]);
       this.editId.set(product.id); this.draft = { ...product }; this.dirtyProduct.set(false);
       if (product.sold) { this.editor.set(false); this.tab.set('archive'); }
+      this.names.update(names=>new Map(names).set(product.id,product.name)); this.brands.set(await this.api.brands()); await this.resetProducts();
       this.notice.set(product.sold?'Товар сохранён в архиве.':'Товар сохранён и доступен в каталоге.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
@@ -178,6 +202,7 @@ export class AdminPage {
     try {
       const archived = await this.api.archiveProduct(product.id);
       this.products.update(products => products.map(item => item.id === archived.id ? archived : item));
+      await this.resetProducts();
       this.notice.set('Товар перенесён в архив и больше не отображается в каталоге.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
@@ -200,18 +225,18 @@ export class AdminPage {
       if (this.editId() === product.id) {
         this.editor.set(false); this.editId.set(null); this.images.set([]); this.dirtyProduct.set(false);
       }
+      this.names.update(names=>{const next=new Map(names);next.delete(product.id);return next;}); this.brands.set(await this.api.brands()); await this.resetProducts();
       this.notice.set('Товар и связанные с ним данные удалены.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
   }
-  productName(id: number) { return this.products().find(product => product.id === id)?.name ?? `Товар №${id}`; }
+  productName(id: number) { return this.names().get(id) ?? `Товар №${id}`; }
   productCover(product: Product) { return previewUrl(product.images.find(image => image.kind === 'front')?.url ?? product.images[0]?.url ?? '/images/no-photo.svg'); }
   patchSettings<K extends keyof StorefrontSettings>(key: K, value: StorefrontSettings[K]) { this.settings.update(settings => settings ? { ...settings, [key]:value } : null); this.dirtySettings.set(true); }
   addSelection(key: 'carousel_product_ids' | 'featured_product_ids', value: string) {
     const id = Number(value); const selected = this.settings()?.[key] ?? [];
     if (!id || selected.includes(id) || selected.length >= 24) return;
     this.patchSettings(key, [...selected, id]);
-    if (key === 'carousel_product_ids') this.carouselChoice = ''; else this.featuredChoice = '';
   }
   removeSelection(key: 'carousel_product_ids' | 'featured_product_ids', index: number) { this.patchSettings(key, this.settings()![key].filter((_, i) => i !== index)); }
   moveSelection(key: 'carousel_product_ids' | 'featured_product_ids', index: number, direction: number) {

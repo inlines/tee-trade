@@ -33,6 +33,10 @@ export class AdminService {
   }
   async logout() { await firstValueFrom(this.http.post('/api/admin/logout', {}, { headers: this.headers() })); this.session.set(null); }
   list() { return firstValueFrom(this.http.get<Product[]>('/api/admin/products')); }
+  page(search:string,sold:boolean,limit:number,offset:number){return firstValueFrom(this.http.get<{items:Product[];total:number}>('/api/admin/products/page',{params:{search,sold,limit,offset}}));}
+  product(id:number){return firstValueFrom(this.http.get<Product>('/api/admin/products/'+id));}
+  brands(){return firstValueFrom(this.http.get<string[]>('/api/admin/products/brands'));}
+  labels(ids:number[]){return firstValueFrom(this.http.get<{id:number;name:string}[]>('/api/admin/products/labels',{params:{ids:JSON.stringify(ids)}}));}
   settings() { return firstValueFrom(this.http.get<StorefrontSettings>('/api/admin/storefront')); }
   saveProduct(id: number | null, draft: ProductDraft) {
     return firstValueFrom(id === null

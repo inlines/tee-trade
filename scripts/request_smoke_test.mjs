@@ -79,9 +79,10 @@ try{
  const reopened=await request(buyer,'/api/auth/requests','POST',d,201);assert.notEqual(reopened.id,row.id);assert.equal(reopened.chat_id,row.chat_id);
  await request(admin,'/api/admin/products/'+productId,'DELETE',undefined,204);productId=null;
  const saved=(await request(buyer,'/api/auth/requests')).find(r=>r.id===row.id);
- assert.equal(saved.product_exists,false);assert.equal(saved.product_name,'Temporary request test');assert.equal(saved.contact,d.contact);
- assert.equal((await request(admin,'/api/admin/requests/'+row.id+'/chat')).id,row.chat_id);
- console.log('PASS: create, validation, auth/CSRF/origin, customer isolation, active duplicates, status transitions, archive persistence, chat association, notification recipients/replay, deleted product snapshots');
+ assert.equal(saved,undefined);
+ await request(admin,'/api/admin/requests/'+row.id, 'GET',undefined,404);
+ await request(admin,'/api/admin/requests/'+row.id+'/chat','GET',undefined,404);
+ console.log('PASS: create, validation, auth/CSRF/origin, customer isolation, active duplicates, status transitions, archive persistence, chat association, notification recipients/replay, deleted product cascade');
 }finally{
  for(const socket of sockets)socket.ws.close();
  if(productId)await request(admin,'/api/admin/products/'+productId,'DELETE',undefined,204);

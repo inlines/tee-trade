@@ -2,11 +2,11 @@ use crate::{ApiError, AppState, CATEGORIES, PRODUCT_COLUMNS, Product, ProductIma
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use axum::{
     Extension, Json, Router,
-    extract::{DefaultBodyLimit, Multipart, Path, Request, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use image::ImageDecoder;
 use rand::{RngCore, rngs::OsRng};
@@ -85,9 +85,12 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .route("/api/admin/session", get(session))
         .route("/api/admin/logout", post(logout))
         .route("/api/admin/products", get(list).post(create))
+        .route("/api/admin/products/page", get(product_page))
+        .route("/api/admin/products/brands", get(brands))
+        .route("/api/admin/products/labels", get(product_labels))
         .route(
             "/api/admin/products/{id}",
-            put(update).delete(delete_product),
+            get(product_detail).put(update).delete(delete_product),
         )
         .route("/api/admin/products/{id}/archive", post(archive_product))
         .route("/api/admin/storefront", get(settings).put(save_settings))
@@ -235,6 +238,100 @@ async fn list(State(state): State<AppState>) -> Result<Json<Vec<Product>>, ApiEr
         .map_err(internal)?,
     ))
 }
+#[derive(Deserialize)]
+struct ProductPageQuery {
+    limit: i64,
+    #[serde(default)]
+    offset: i64,
+    #[serde(default)]
+    sold: bool,
+    #[serde(default)]
+    search: String,
+}
+#[derive(Serialize)]
+struct AdminProductPage {
+    items: Vec<Product>,
+    total: i64,
+}
+async fn product_page(
+    State(s): State<AppState>,
+    Query(q): Query<ProductPageQuery>,
+) -> Result<Json<AdminProductPage>, ApiError> {
+    if ![4, 8].contains(&q.limit)
+        || q.offset < 0
+        || q.offset > 1_000_000
+        || q.search.chars().count() > 160
+    {
+        return Err(bad("Invalid pagination"));
+    }
+    let mut tx = s.db.begin().await.map_err(internal)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?;
+    let filter = "sold=$1 AND strpos(lower(name || ' ' || brand),lower($2))>0";
+    let total = sqlx::query_scalar(&format!("SELECT count(*) FROM products WHERE {filter}"))
+        .bind(q.sold)
+        .bind(q.search.trim())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(internal)?;
+    let items = sqlx::query_as(&format!(
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE {filter} ORDER BY id DESC LIMIT $3 OFFSET $4"
+    ))
+    .bind(q.sold)
+    .bind(q.search.trim())
+    .bind(q.limit)
+    .bind(q.offset)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    Ok(Json(AdminProductPage { items, total }))
+}
+async fn product_detail(
+    State(s): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<Json<Product>, ApiError> {
+    sqlx::query_as(&format!(
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE id=$1"
+    ))
+    .bind(id)
+    .fetch_optional(&s.db)
+    .await
+    .map_err(internal)?
+    .map(Json)
+    .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))
+}
+async fn brands(State(s): State<AppState>) -> Result<Json<Vec<String>>, ApiError> {
+    Ok(Json(sqlx::query_scalar("SELECT min(btrim(brand)) FROM products WHERE btrim(brand)<>'' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))").fetch_all(&s.db).await.map_err(internal)?))
+}
+#[derive(Deserialize)]
+struct LabelQuery {
+    ids: String,
+}
+#[derive(Serialize, sqlx::FromRow)]
+struct ProductLabel {
+    id: i32,
+    name: String,
+}
+async fn product_labels(
+    State(s): State<AppState>,
+    Query(q): Query<LabelQuery>,
+) -> Result<Json<Vec<ProductLabel>>, ApiError> {
+    let ids: Vec<i32> = serde_json::from_str(&q.ids).map_err(|_| bad("Invalid IDs"))?;
+    if ids.len() > 48 {
+        return Err(bad("Too many IDs"));
+    }
+    Ok(Json(
+        sqlx::query_as("SELECT id,name FROM products WHERE id=ANY($1)")
+            .bind(ids)
+            .fetch_all(&s.db)
+            .await
+            .map_err(internal)?,
+    ))
+}
+
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct ProductInput {

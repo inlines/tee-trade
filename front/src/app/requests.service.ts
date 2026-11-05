@@ -16,6 +16,8 @@ export class RequestsService {
  readonly revision=signal(0);readonly formOpen=signal(false);
  private headers(admin=false){return {'X-CSRF-Token':(admin?this.admin.session():this.customer.session())?.csrf_token??''};}
  list(admin=false){return firstValueFrom(this.http.get<PurchaseRequest[]>('/api/'+(admin?'admin':'auth')+'/requests'));}
+ page(archive:boolean,limit:number,offset:number){return firstValueFrom(this.http.get<{items:PurchaseRequest[];total:number;active:number;completed:number}>('/api/admin/requests/page',{params:{archive,limit,offset}}));}
+ detail(id:number){return firstValueFrom(this.http.get<PurchaseRequest>('/api/admin/requests/'+id));}
  create(draft:RequestDraft){return firstValueFrom(this.http.post<PurchaseRequest>('/api/auth/requests',draft,{headers:this.headers()}));}
  update(id:number,status:RequestStatus){return firstValueFrom(this.http.post<PurchaseRequest>('/api/admin/requests/'+id+'/status',{status},{headers:this.headers(true)}));}
  chat(id:number){return firstValueFrom(this.http.get<Chat>('/api/admin/requests/'+id+'/chat'));}
