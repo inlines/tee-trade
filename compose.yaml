@@ -1,6 +1,14 @@
 services:
+  media-init:
+    build: ./backend
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /data/media && chown 10001:10001 /data/media && chmod 755 /data/media"]
+    volumes: ["media_data:/data/media"]
+    restart: "no"
   front:
     build: ./front
+    volumes: ["media_data:/data/media:ro"]
     ports: ["127.0.0.1:4200:80"]
     depends_on:
       backend:
@@ -8,9 +16,11 @@ services:
     restart: unless-stopped
   backend:
     build: ./backend
+    volumes: ["media_data:/data/media"]
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-tee_trade}:${POSTGRES_PASSWORD:?Copy .env.example to .env}@postgres:5432/${POSTGRES_DB:-tee_trade}
       REDIS_URL: redis://redis:6379
+      MEDIA_DIR: /data/media
       RUST_LOG: info
       ADMIN_USERNAME: ${ADMIN_USERNAME:-arzamas}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
@@ -18,6 +28,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
+      media-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -82,6 +94,7 @@ services:
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
     restart: unless-stopped
 volumes:
+  media_data:
   postgres_data:
   prometheus_data:
   grafana_data:

@@ -56,7 +56,7 @@ pub struct Session {
     csrf_token: String,
 }
 
-pub async fn bootstrap(db: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn bootstrap(db: &PgPool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM admin_account)")
         .fetch_one(db)
         .await?;
@@ -497,6 +497,9 @@ async fn delete_product(
         .await
         .map_err(internal)?;
     tx.commit().await.map_err(internal)?;
+    if let Err(error) = crate::media_store::cleanup(&state.db).await {
+        tracing::error!(%error,"media cleanup queued for retry");
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -594,13 +597,7 @@ async fn upload(
         .await
         .map_err(internal)??;
     let id = token();
-    sqlx::query("INSERT INTO media (id, content, preview) VALUES ($1, $2, $3)")
-        .bind(&id)
-        .bind(jpeg)
-        .bind(preview)
-        .execute(&state.db)
-        .await
-        .map_err(internal)?;
+    crate::media_store::upload(&state.db, &id, &jpeg, &preview).await?;
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({"url": format!("/api/media/{id}")})),
@@ -610,15 +607,7 @@ pub async fn media(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    if id.len() != 64 || !id.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Err((StatusCode::NOT_FOUND, "Фото не найдено"));
-    }
-    let bytes: Vec<u8> = sqlx::query_scalar("SELECT content FROM media WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "Фото не найдено"))?;
+    let bytes = crate::media_store::read(&state.db, &id, false).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "image/jpeg"),
@@ -750,7 +739,7 @@ async fn selected_products(db: &PgPool, ids: &[i32]) -> Result<Vec<Product>, Api
     .map_err(internal)
 }
 
-fn encode_preview(decoded: &image::DynamicImage) -> Result<Vec<u8>, ApiError> {
+pub(crate) fn encode_preview(decoded: &image::DynamicImage) -> Result<Vec<u8>, ApiError> {
     let mut output = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, 78)
         .encode_image(&decoded.thumbnail(480, 480).to_rgb8())
@@ -761,39 +750,7 @@ pub async fn media_preview(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    if id.len() != 64 || !id.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Err((StatusCode::NOT_FOUND, "Фото не найдено"));
-    }
-    let preview: Option<Vec<u8>> = sqlx::query_scalar("SELECT preview FROM media WHERE id=$1")
-        .bind(&id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "Фото не найдено"))?;
-    let bytes = match preview {
-        Some(bytes) => bytes,
-        None => {
-            let original: Vec<u8> = sqlx::query_scalar("SELECT content FROM media WHERE id=$1")
-                .bind(&id)
-                .fetch_optional(&state.db)
-                .await
-                .map_err(internal)?
-                .ok_or((StatusCode::NOT_FOUND, "Фото не найдено"))?;
-            let bytes = tokio::task::spawn_blocking(move || {
-                let decoded = image::load_from_memory(&original).map_err(internal)?;
-                encode_preview(&decoded)
-            })
-            .await
-            .map_err(internal)??;
-            sqlx::query("UPDATE media SET preview=$2 WHERE id=$1 AND preview IS NULL")
-                .bind(&id)
-                .bind(&bytes)
-                .execute(&state.db)
-                .await
-                .map_err(internal)?;
-            bytes
-        }
-    };
+    let bytes = crate::media_store::read(&state.db, &id, true).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "image/jpeg"),

@@ -2,6 +2,7 @@ mod admin;
 mod catalog_cache;
 mod chat;
 mod customers;
+mod media_store;
 mod monitoring;
 mod requests;
 use axum::{
@@ -239,12 +240,26 @@ async fn count(State(state): State<AppState>, request: Request, next: Next) -> R
     response
 }
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     let db = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
     sqlx::migrate!().run(&db).await?;
+    media_store::initialize().await?;
+    if let Some(mode) = std::env::args().nth(1) {
+        media_store::run(&db, &mode, std::env::args().nth(2).as_deref()).await?;
+        return Ok(());
+    }
+    let cleanup_db = db.clone();
+    tokio::spawn(async move {
+        loop {
+            if let Err(error) = media_store::cleanup(&cleanup_db).await {
+                tracing::error!(%error,"media file cleanup failed; will retry");
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        }
+    });
     admin::bootstrap(&db).await?;
     let registry = Registry::new();
     let requests = IntCounterVec::new(

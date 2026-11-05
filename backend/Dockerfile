@@ -18,6 +18,7 @@ RUN --mount=type=cache,id=tee-trade-cargo-registry,target=/usr/local/cargo/regis
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/tee-trade-api /usr/local/bin/tee-trade-api
+RUN mkdir -p /data/media && chown 10001:10001 /data/media
 USER 10001:10001
 EXPOSE 8080
 CMD ["tee-trade-api"]

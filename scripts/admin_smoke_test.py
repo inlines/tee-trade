@@ -175,13 +175,11 @@ try:
     assert len(preview) < len(content) and 'immutable' in preview_headers['Cache-Control']
     media_id = main_url.rsplit('/',1)[-1]
     assert len(media_id)==64 and all(c in '0123456789abcdef' for c in media_id)
-    subprocess.run(['docker','compose','exec','-T','postgres','sh','-c','psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1'],input=f"UPDATE media SET preview=NULL WHERE id='{media_id}';",text=True,check=True,stdout=subprocess.DEVNULL)
-    regenerated, _ = request(main_url + '/preview', auth=False)
-    assert dimensions(regenerated) == (480,360)
+    assert sql(f"SELECT content IS NULL AND preview IS NULL FROM media WHERE id='{media_id}'") == 't'
+    assert preview_headers.get('X-Media-Storage') == 'filesystem'
     assert request(main_url, auth=False)[0] == content
-    assert request(main_url + '/preview', auth=False)[0] == regenerated
     request('/api/media/invalid/preview', expected=404, auth=False)
-    print('PASS: small previews, lazy generation for old photos, immutable caching, unchanged large image')
+    print('PASS: file-only uploads, static previews, immutable caching, unchanged large image')
 
     product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brand':'Test', 'release_year':2026,
                'description':'Temporary integration fixture', 'theme':'Test', 'price_cents':12345, 'is_demo':False,
