@@ -72,7 +72,7 @@ export class AdminPage {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
   }
-  private emptyDraft(): ProductDraft { return { name:'', category:'', brand:'', release_year:null, description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
+  private emptyDraft(): ProductDraft { return { name:'', category:'', brand:'', size:'', description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
   private async initialize() {
     try { await this.api.restore(); if (this.api.session()) await this.load(); }
     catch (error) { this.handleError(error); }

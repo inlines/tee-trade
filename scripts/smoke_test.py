@@ -35,8 +35,7 @@ class CatalogSmokeTest(unittest.TestCase):
                 self.assertEqual(product, detail)
                 for field in ('name', 'brand', 'description', 'theme'):
                     self.assertIsInstance(detail[field], str)
-                if detail['release_year'] is not None:
-                    self.assertTrue(1900 <= detail['release_year'] <= 2100)
+                self.assertIsInstance(detail['size'], str)
                 if detail['price_cents'] is not None:
                     self.assertGreaterEqual(detail['price_cents'], 0)
                 self.assertLessEqual(len(detail['images']), 12)

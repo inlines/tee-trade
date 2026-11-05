@@ -31,7 +31,7 @@
               <label>Название<input name="name" [(ngModel)]="draft.name" maxlength="160"></label>
               <label>Категория<select name="category" [(ngModel)]="draft.category"><option value="">Не указана</option>@for (category of categories; track category.slug) { <option [value]="category.slug">{{ category.name }}</option> }</select></label>
               <app-brand-picker [value]="draft.brand" [brands]="brands()" [disabled]="busy() || uploading()" (valueChange)="draft.brand=$event; dirtyProduct.set(true)" />
-              <label>Год выпуска<input name="year" type="number" [(ngModel)]="draft.release_year" min="1900" max="2100" step="1"></label>
+              <label>Размер<input name="size" type="text" [(ngModel)]="draft.size" maxlength="100" placeholder="Например, M, XL или 42"></label>
               <label>Тематика<input name="theme" [(ngModel)]="draft.theme" maxlength="160"></label>
               <label>Цена, ₽<input name="price" type="number" [(ngModel)]="price" min="0" max="21474836.47" step="0.01"></label>
               <label class="full-width">Описание<textarea name="description" [(ngModel)]="draft.description" maxlength="10000" rows="7"></textarea></label>

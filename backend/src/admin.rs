@@ -339,7 +339,7 @@ struct ProductInput {
     price_cents: Option<i32>,
     category: String,
     brand: String,
-    release_year: Option<i32>,
+    size: String,
     description: String,
     theme: String,
     images: Vec<ProductImage>,
@@ -357,18 +357,16 @@ async fn validate_product(
 ) -> Result<(), ApiError> {
     if input.name.chars().count() > 160
         || input.brand.chars().count() > 100
+        || input.size.chars().count() > 100
         || input.theme.chars().count() > 160
         || input.description.chars().count() > 10000
     {
         return Err(bad("Превышена допустимая длина поля"));
     }
     if (!input.category.is_empty() && !CATEGORIES.contains(&input.category.as_str()))
-        || input
-            .release_year
-            .is_some_and(|year| !(1900..=2100).contains(&year))
         || input.price_cents.is_some_and(|price| price < 0)
     {
-        return Err(bad("Проверьте категорию, год и цену"));
+        return Err(bad("Проверьте категорию и цену"));
     }
     if input.images.iter().filter(|i| i.carousel).count() > 1 {
         return Err(bad("Выберите одно фото для главной"));
@@ -418,8 +416,8 @@ async fn create(
         .await
         .map_err(internal)?;
     validate_product(&input, None, &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brand, release_year, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.release_year).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brand, size, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await
@@ -522,8 +520,8 @@ async fn update(
     .map_err(internal)?
     .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
     validate_product(&input, Some(&existing), &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brand=$4, release_year=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.release_year).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brand=$4, size=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await

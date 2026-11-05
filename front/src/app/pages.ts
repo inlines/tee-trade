@@ -62,7 +62,7 @@ export class HomePage {
     @else {
       @if (loading() && !items().length) { <p class="status" role="status">Загружаем вещи…</p> }
       @else {
-        <div class="catalog-toolbar"><p>Позиций: {{ total() }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option><option value="year">По году выпуска</option></select></label></div>
+        <div class="catalog-toolbar"><p>Позиций: {{ total() }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option></select></label></div>
         <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" /> } @empty { @if(!error()){ <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
         @if (loading()) { <p class="status" role="status">Загружаем вещи…</p> }
         @else if (error()) { <div class="status" role="alert"><p>{{error()}}</p><button class="button" (click)="loadMore()">Повторить</button></div> }
@@ -138,8 +138,8 @@ export class CatalogPage {
             <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="previewUrl(image.url)" alt="" width="100" height="110" loading="lazy" decoding="async"></button>
           }</div>
         </div>
-        <div class="product-info"><p class="eyebrow">{{ product.brand }}{{ product.brand && product.release_year ? ' / ' : '' }}{{ product.release_year }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
-          <dl><div><dt>Бренд</dt><dd>{{ product.brand || 'Не указан' }}</dd></div><div><dt>Год выпуска</dt><dd>{{ product.release_year || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
+        <div class="product-info"><p class="eyebrow">{{ product.brand }}{{ product.brand && product.size ? ' / ' : '' }}{{ product.size }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
+          <dl><div><dt>Бренд</dt><dd>{{ product.brand || 'Не указан' }}</dd></div><div><dt>Размер</dt><dd>{{ product.size || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
           @if(product.sold){<p class="demo-note">Продано · Товар в архиве</p>}
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
           @if (product.is_demo) { <p class="demo-note">Демонстрационный товар. В галерее — иллюстрации, включая шаблон ярлычка. Они не заменяют фотографии реальной вещи.</p> }

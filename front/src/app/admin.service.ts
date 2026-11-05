@@ -5,7 +5,7 @@ import { Product, ProductImage } from './catalog';
 
 export interface AdminSession { username: string; csrf_token: string; }
 export interface ProductDraft {
-  name: string; category: string; brand: string; release_year: number | null; description: string;
+  name: string; category: string; brand: string; size: string; description: string;
   theme: string; price_cents: number | null; images: ProductImage[]; is_demo: boolean; sold: boolean;
 }
 export interface StorefrontSettings {

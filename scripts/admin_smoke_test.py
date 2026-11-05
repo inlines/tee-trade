@@ -96,7 +96,7 @@ try:
     empty, _ = request('/api/admin/products', 'POST', {}, 201)
     created_products.append(empty['id'])
     assert empty['images'] == [] and empty['name'] == ''
-    assert empty['price_cents'] is None and empty['release_year'] is None
+    assert empty['price_cents'] is None and empty['size'] == ''
     public_empty, _ = request(f"/api/products/{empty['id']}", auth=False)
     assert public_empty == empty
     request(f"/api/admin/products/{empty['id']}", 'PUT', {})
@@ -104,9 +104,9 @@ try:
     print('PASS: create, retrieve and edit an entirely empty product')
     paging_ids = []
     for i in range(10):
-        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brand':f'{fixture_user} Brand {i%2}', 'price_cents':(10-i)*100, 'release_year':2000+i}, 201)
+        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brand':f'{fixture_user} Brand {i%2}', 'price_cents':(10-i)*100, 'size':str(40+i)}, 201)
         paging_ids.append(item['id']); created_products.append(item['id'])
-    for sort, key in [('default',lambda p:(p['id'],)), ('price-asc',lambda p:(p['price_cents'] is None,p['price_cents'] or 0,p['id'])), ('price-desc',lambda p:(p['price_cents'] is None,-(p['price_cents'] or 0),p['id'])), ('year',lambda p:(p['release_year'] is None,-(p['release_year'] or 0),p['id']))]:
+    for sort, key in [('default',lambda p:(p['id'],)), ('price-asc',lambda p:(p['price_cents'] is None,p['price_cents'] or 0,p['id'])), ('price-desc',lambda p:(p['price_cents'] is None,-(p['price_cents'] or 0),p['id']))]:
         expected = sorted(request('/api/products?category=hoodies',auth=False)[0],key=key)
         for size in [4,8]:
             loaded=[]
@@ -181,7 +181,7 @@ try:
     request('/api/media/invalid/preview', expected=404, auth=False)
     print('PASS: file-only uploads, static previews, immutable caching, unchanged large image')
 
-    product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brand':'Test', 'release_year':2026,
+    product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brand':'Test', 'size':' XL ',
                'description':'Temporary integration fixture', 'theme':'Test', 'price_cents':12345, 'is_demo':False,
                'images':[{'url':main_url, 'alt':'Test front', 'kind':'front'}, {'url':label_url, 'alt':'Test gallery', 'kind':'detail', 'carousel':True}]}
     invalid = copy.deepcopy(product); invalid['images'][0]['carousel'] = True
@@ -197,11 +197,15 @@ try:
     saved, _ = request('/api/admin/products', 'POST', product, 201)
     request(f"/api/admin/products/{one_photo['id']}", 'DELETE', expected=204)
     product_id = saved['id']; created_products.append(product_id)
+    assert saved['size'] == 'XL' and 'release_year' not in saved
     request('/api/products?category=t-shirts')  # Warm the old cache before editing.
     product['name'] += ' edited'; product['category'] = 'accessories'; product['price_cents'] = 54321
+    product['size'] = '42–44 / oversize'
     updated, _ = request(f'/api/admin/products/{product_id}', 'PUT', product)
     public, _ = request(f'/api/products/{product_id}', auth=False)
     assert updated == public and public['name'] == product['name']
+    assert public['size'] == product['size']
+    request('/api/admin/products', 'POST', {**product, 'size':'x'*101}, 400)
     assert public['images'][1]['carousel'] is True and public['images'][0]['carousel'] is False
     archived_draft = {**product, 'category':'hoodies', 'sold':True}
     pid = public['id']

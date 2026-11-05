@@ -45,14 +45,14 @@ struct Product {
     price_cents: Option<i32>,
     category: String,
     brand: String,
-    release_year: Option<i32>,
+    size: String,
     description: String,
     theme: String,
     images: sqlx::types::Json<Vec<ProductImage>>,
     is_demo: bool,
     sold: bool,
 }
-const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brand, release_year, description, theme, images, is_demo, sold";
+const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brand, size, description, theme, images, is_demo, sold";
 const CATEGORIES: [&str; 5] = ["sneakers", "t-shirts", "accessories", "headwear", "hoodies"];
 #[derive(Deserialize)]
 struct CatalogQuery {
@@ -140,7 +140,6 @@ async fn product_page(
         "" | "default" => "id ASC",
         "price-asc" => "price_cents ASC NULLS LAST, id ASC",
         "price-desc" => "price_cents DESC NULLS LAST, id ASC",
-        "year" => "release_year DESC NULLS LAST, id ASC",
         _ => return Err((StatusCode::BAD_REQUEST, "Unknown sort")),
     };
     let key = format!(
