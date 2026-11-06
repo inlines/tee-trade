@@ -1,10 +1,11 @@
+import { CatalogNavigation, parseCatalogNavigation } from './catalog-navigation';
 import { CatalogEnd } from './catalog-end';
 import { ProgressiveImage } from './progressive-image';
 import { RequestsService } from './requests.service';
 import { RequestDialog } from './request-dialog';
 import { Component, computed, inject, signal, effect, DestroyRef, untracked } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
-import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, of, startWith, Subject, switchMap, Subscription } from 'rxjs';
 import { CatalogService, categories, categoryName, loadState, LoadState, Product, previewUrl } from './catalog';
@@ -63,7 +64,7 @@ export class HomePage {
       @if (loading() && !items().length) { <p class="status" role="status">Загружаем вещи…</p> }
       @else {
         <div class="catalog-toolbar"><p>Позиций: {{ total() }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option></select></label></div>
-        <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" /> } @empty { @if(!error()){ <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
+        <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" [catalogQuery]="productQuery(i)" /> } @empty { @if(!error()){ <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
         @if (loading()) { <p class="status" role="status">Загружаем вещи…</p> }
         @else if (error()) { <div class="status" role="alert"><p>{{error()}}</p><button class="button" (click)="loadMore()">Повторить</button></div> }
         @else if (hasMore()) { <app-catalog-end (reached)="loadMore()" /> }
@@ -92,6 +93,10 @@ export class CatalogPage {
   readonly sort = signal('default');
   readonly hasDemo = computed(() => this.items().some(product => product.is_demo));
   private offset = 0;
+  private pageSize = window.matchMedia('(max-width:700px)').matches ? 4 : 8;
+  productQuery(index: number) {
+    return { catalog: JSON.stringify({ category: this.category(), sold: this.archived, sort: this.sort(), brands: this.selectedBrands(), limit: this.pageSize, index, total: this.total() }) };
+  }
   private request?: Subscription;
   constructor() {
     effect(() => {
@@ -99,6 +104,7 @@ export class CatalogPage {
       untracked(() => {
         if(category!==this.lastCategory){ this.lastCategory=category; this.selectedBrands.set([]); this.brands.set([]); }
         this.request?.unsubscribe(); this.items.set([]); this.offset=0;
+        this.pageSize=window.matchMedia('(max-width:700px)').matches?4:8;
         this.total.set(0); this.hasMore.set(true); this.loading.set(false); this.error.set('');
         if(this.validCategory()) this.loadMore();
       });
@@ -108,7 +114,7 @@ export class CatalogPage {
   loadMore() {
     if(this.loading() || !this.hasMore()) return;
     this.loading.set(true); this.error.set('');
-    const limit=window.matchMedia('(max-width:700px)').matches?4:8;
+    const limit=this.pageSize;
     this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset,this.selectedBrands()).subscribe({
       next: page => {
         this.brands.set(page.brands);
@@ -130,7 +136,16 @@ export class CatalogPage {
     @else if (state.error) { <div class="status" role="alert"><p>{{ state.error }}</p><button class="button" (click)="retry.next()">Повторить</button></div> }
     @else if (state.data; as product) {
       <nav class="breadcrumbs" aria-label="Хлебные крошки"><a routerLink="/">Главная</a><span>/</span><a routerLink="/catalog">Каталог</a><span>/</span><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a><span>/</span><span>{{ product.name || 'Без названия' }}</span></nav>
-      <section class="product-detail">
+      @if (admin.session() && navigation(); as context) {
+        <nav class="product-navigation" aria-label="Навигация по товарам каталога">
+          <button class="button" type="button" aria-label="Предыдущий товар" [disabled]="navigating() || context.index === 0" (click)="navigateProduct(-1)">←</button>
+          <span aria-live="polite">{{ context.index + 1 }} / {{ context.total }}</span>
+          <button class="button" type="button" aria-label="Следующий товар" [disabled]="navigating() || context.index + 1 >= context.total" (click)="navigateProduct(1)">→</button>
+        </nav>
+        @if (navigationError()) { <p role="alert">{{ navigationError() }}</p> }
+      }
+      <section class="product-detail" [class.product-swipe-enabled]="admin.session() && navigation()"
+        (pointerdown)="startSwipe($event)" (pointerup)="finishSwipe($event)" (pointercancel)="cancelSwipe()">
         <div class="gallery">
           @if (activeImage(); as image) { <div class="gallery-main"><img [appProgressiveImage]="image.url" [alt]="image.alt" width="640" height="720" fetchpriority="high" loading="eager" decoding="async"></div> }
           @if (!activeImage()) { <div class="gallery-main"><img src="/images/no-photo.svg" alt="Фото пока нет" width="640" height="720"></div> }
@@ -150,16 +165,78 @@ export class CatalogPage {
           @if (!product.sold && customer.ready() && !customer.session() && !admin.session()) {
             <p class="seller-contact">Чтобы написать продавцу или оставить заявку, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
           }
-          <a class="text-link back-link" [routerLink]="product.sold ? ['/archive'] : product.category ? ['/catalog', product.category] : ['/catalog']">← Назад в раздел</a>
+          <a class="text-link back-link" [routerLink]="backToCatalog(product)">← Назад в раздел</a>
         </div>
       </section>
     }
   }`,
 })
 export class ProductPage {
+  private swipe: { id: number; x: number; y: number; time: number } | null = null;
+  startSwipe(event: PointerEvent) {
+    if (!event.isPrimary) { this.cancelSwipe(); return; }
+    if (event.pointerType !== 'touch' || !this.admin.session() || !this.navigation() || this.navigating()
+      || !(event.target instanceof Element)
+      || event.target.closest('a, button, input, select, textarea, label, [role="button"], [contenteditable]')) {
+      this.cancelSwipe();
+      return;
+    }
+    this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
+  }
+  cancelSwipe() { this.swipe = null; }
+  finishSwipe(event: PointerEvent) {
+    const start = this.swipe;
+    this.cancelSwipe();
+    if (!start || start.id !== event.pointerId || !event.isPrimary) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (event.timeStamp - start.time > 800 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (event.target instanceof Element && event.target.closest('a, button, input, select, textarea, label, [role="button"], [contenteditable]')) return;
+    this.navigateProduct(dx < 0 ? 1 : -1);
+  }
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private navigationRequest?: Subscription;
+  readonly navigating = signal(false);
+  readonly navigationError = signal('');
+  readonly navigation = toSignal(inject(ActivatedRoute).queryParamMap.pipe(map(params => parseCatalogNavigation(params.get('catalog')))));
+  backToCatalog(product: Product) {
+    const context = this.admin.session() ? this.navigation() : null;
+    return context ? (context.sold ? ['/archive'] : context.category ? ['/catalog', context.category] : ['/catalog'])
+      : product.sold ? ['/archive'] : product.category ? ['/catalog', product.category] : ['/catalog'];
+  }
+  navigateProduct(direction: -1 | 1) {
+    const context = this.navigation();
+    if (!this.admin.session() || !context || this.navigating()) return;
+    const index = context.index + direction;
+    if (index < 0 || index >= context.total) return;
+    this.navigating.set(true);
+    this.navigationError.set('');
+    const offset = Math.floor(index / context.limit) * context.limit;
+    this.navigationRequest = this.api.page(context.category, context.sold, context.sort, context.limit, offset, context.brands).subscribe({
+      next: page => {
+        const product = page.items[index - offset];
+        if (!product) {
+          this.navigationError.set('Список товаров изменился. Вернитесь в каталог и выберите товар заново.');
+          this.navigating.set(false);
+          return;
+        }
+        const next: CatalogNavigation = { ...context, index, total: page.total };
+        void this.router.navigate(['/product', product.id], { queryParams: { catalog: JSON.stringify(next) } })
+          .catch(() => this.navigationError.set('Не удалось открыть товар. Попробуйте ещё раз.'))
+          .finally(() => this.navigating.set(false));
+      },
+      error: () => {
+        this.navigationError.set('Не удалось загрузить соседний товар. Попробуйте ещё раз.');
+        this.navigating.set(false);
+      }
+    });
+  }
   readonly previewUrl = previewUrl;
   private trackedProduct:number|null=null;
-  constructor(){effect(()=>{
+  constructor(){
+    this.destroyRef.onDestroy(() => this.navigationRequest?.unsubscribe());
+    effect(()=>{
     const product=this.state()?.data;
     if(!product||product.is_demo||this.trackedProduct===product.id)return;
     this.trackedProduct=product.id;

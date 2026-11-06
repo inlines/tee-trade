@@ -5,7 +5,7 @@ import { AdminService } from './admin.service';
 import { Product, previewUrl } from './catalog';
 @Component({
   selector: 'app-product-card', imports: [RouterLink, CurrencyPipe],
-  template: `<a class="product-card" [routerLink]="['/product', product().id]">
+  template: `<a class="product-card" [routerLink]="['/product', product().id]" [queryParams]="admin.session() ? catalogQuery() : null">
     <div class="product-cover"><img [src]="previewUrl()" [alt]="cover().alt" [loading]="priority() ? 'eager' : 'lazy'" [attr.fetchpriority]="priority() ? 'high' : 'auto'" decoding="async" width="640" height="720">
       @if (product().sold) { <span class="demo-badge">Продано</span> }
       @if (!product().sold && product().is_demo) { <span class="demo-badge">Демо</span> }
@@ -21,6 +21,7 @@ import { Product, previewUrl } from './catalog';
 export class ProductCard {
   readonly admin = inject(AdminService);
   readonly priority = input(false);
+  readonly catalogQuery = input<Record<string, string> | null>(null);
   readonly product = input.required<Product>();
   previewUrl() { return previewUrl(this.cover().url); }
   cover() { return this.product().images.find(image => image.kind === 'front') ?? this.product().images[0] ?? {url:'/images/no-photo.svg', alt:'Фото пока нет'}; }

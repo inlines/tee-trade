@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const req = require('node:module').createRequire(require('node:path').resolve('front/package.json'));
+const ts = req('typescript');
+const compile = source => ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const signal = value => Object.assign(() => value, {set: next => value = next});
+const parsed = {};
+vm.runInNewContext(compile(fs.readFileSync('front/src/app/catalog-navigation.ts','utf8')), {exports:parsed, require:()=>({categories:[{slug:'t-shirts'}]})});
+const context = {category:'t-shirts',sold:false,sort:'price-desc',brands:['Brand'],limit:4,index:3,total:10};
+assert.equal(parsed.parseCatalogNavigation(JSON.stringify(context)).index,3);
+for (const value of [null,'{','null',JSON.stringify({...context,index:-1}),JSON.stringify({...context,limit:100}),JSON.stringify({...context,brands:[1]})]) assert.equal(parsed.parseCatalogNavigation(value),null);
+const source = fs.readFileSync('front/src/app/pages.ts','utf8').split('export class ProductPage {')[1].split('\n@Component')[0];
+class Element { constructor(interactive=false) {this.interactive=interactive;} closest(){return this.interactive;} }
+const exported = {};
+vm.runInNewContext(compile('export class ProductPage {'+source), {exports:exported,Element});
+const page = Object.create(exported.ProductPage.prototype);
+let observer, args, destination;
+Object.assign(page, {admin:{session:()=>true},navigation:()=>context,navigating:signal(false),navigationError:signal(''),api:{page(...values){args=values;return {subscribe(value){observer=value;return {unsubscribe(){}};}};}},router:{navigate(path,options){destination={path,options};return Promise.resolve(true);}}});
+page.navigateProduct(1);
+assert.equal(args[0],'t-shirts');assert.equal(args[2],'price-desc');assert.equal(args[3],4);assert.equal(args[4],4);assert.equal(args[5][0],'Brand');
+observer.next({items:[{id:55},{id:56}],total:10});
+assert.equal(destination.path.join('/'),'/product/55');assert.equal(JSON.parse(destination.options.queryParams.catalog).index,4);
+page.navigating.set(false);context.index=4;page.navigateProduct(-1);assert.equal(args[4],0);
+observer.error();assert.ok(page.navigationError());assert.equal(page.navigating(),false);
+context.index=0;args=null;page.navigateProduct(-1);assert.equal(args,null);
+context.index=9;page.navigateProduct(1);assert.equal(args,null);
+const directions=[];page.navigateProduct=value=>directions.push(value);
+const event = (x,y=0,interactive=false,extra={})=>({pointerId:1,isPrimary:true,pointerType:'touch',clientX:x,clientY:y,timeStamp:0,target:new Element(interactive),...extra});
+page.startSwipe(event(200));page.finishSwipe(event(80,5,false,{timeStamp:200}));assert.equal(directions.pop(),1);
+page.startSwipe(event(80));page.finishSwipe(event(200,5,false,{timeStamp:200}));assert.equal(directions.pop(),-1);
+for (const [start,end] of [[event(200,0,true),event(80)],[event(200),event(195)],[event(200),event(80,150)],[event(200),event(80,0,true)],[event(200),event(80,0,false,{timeStamp:1000})],[event(200,0,false,{pointerType:'mouse'}),event(80)]]) {page.startSwipe(start);page.finishSwipe(end);assert.equal(directions.length,0);}
+page.startSwipe(event(200));page.cancelSwipe();page.finishSwipe(event(80));assert.equal(directions.length,0);
+page.startSwipe(event(200));page.startSwipe(event(210,0,false,{isPrimary:false,pointerId:2}));page.finishSwipe(event(80));assert.equal(directions.length,0);
+console.log('PASS: context validation, paging forward/back, filters, boundaries, request errors, swipe directions, taps, interactive controls, scrolling, cancellation and multi-touch');
