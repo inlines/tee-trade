@@ -153,7 +153,7 @@ export class CatalogPage {
             <button [class.active]="activeIndex() === i" [attr.aria-pressed]="activeIndex() === i" [attr.aria-label]="image.alt" (click)="choose(product.id, i)"><img [src]="previewUrl(image.url)" alt="" width="100" height="110" loading="lazy" decoding="async"></button>
           }</div>
         </div>
-        <div class="product-info"><p class="eyebrow">{{ product.brands.join(' × ') }}{{ product.brands.length && product.size ? ' / ' : '' }}{{ product.size }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
+        <div class="product-info">@if (product.brands.length) { <p class="eyebrow">{{ product.brands.join(' × ') }}</p> }<h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
           @if (admin.session()) {
             <a class="text-link" routerLink="/admin" [queryParams]="{edit: product.id}">Редактировать товар</a>
           }
