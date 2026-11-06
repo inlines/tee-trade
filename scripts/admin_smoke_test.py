@@ -104,7 +104,7 @@ try:
     print('PASS: create, retrieve and edit an entirely empty product')
     paging_ids = []
     for i in range(10):
-        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brand':f'{fixture_user} Brand {i%2}', 'price_cents':(10-i)*100, 'size':str(40+i)}, 201)
+        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brands':[f'{fixture_user} Brand {i%2}'], 'price_cents':(10-i)*100, 'size':str(40+i)}, 201)
         paging_ids.append(item['id']); created_products.append(item['id'])
     for sort, key in [('default',lambda p:(p['id'],)), ('price-asc',lambda p:(p['price_cents'] is None,p['price_cents'] or 0,p['id'])), ('price-desc',lambda p:(p['price_cents'] is None,-(p['price_cents'] or 0),p['id']))]:
         expected = sorted(request('/api/products?category=hoodies',auth=False)[0],key=key)
@@ -136,8 +136,8 @@ try:
         page=request(facet_base+urlencode({'brands':json.dumps(selected)}),auth=False)[0]
         assert page['total']==expected_count
         assert page['brands']==all_facets, 'Brand selection must not shrink its own facet'
-        assert all(p['brand'].lower() in [b.lower() for b in selected] for p in page['items'])
-    other,_=request('/api/admin/products','POST',{'category':'sneakers','brand':fixture_user+' Other'},201)
+        assert all(any(b.lower() in [v.lower() for v in selected] for b in p['brands']) for p in page['items'])
+    other,_=request('/api/admin/products','POST',{'category':'sneakers','brands':[fixture_user+' Other']},201)
     created_products.append(other['id'])
     assert fixture_user+' Other' not in request(facet_base,auth=False)[0]['brands']
     assert brand_a not in request('/api/products/page?category=sneakers&limit=4',auth=False)[0]['brands']
@@ -181,7 +181,7 @@ try:
     request('/api/media/invalid/preview', expected=404, auth=False)
     print('PASS: file-only uploads, static previews, immutable caching, unchanged large image')
 
-    product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brand':'Test', 'size':' XL ',
+    product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brands':['Test', 'Collab'], 'size':' XL ',
                'description':'Temporary integration fixture', 'theme':'Test', 'price_cents':12345, 'is_demo':False,
                'images':[{'url':main_url, 'alt':'Test front', 'kind':'front'}, {'url':label_url, 'alt':'Test gallery', 'kind':'detail', 'carousel':True}]}
     invalid = copy.deepcopy(product); invalid['images'][0]['carousel'] = True
@@ -197,7 +197,18 @@ try:
     saved, _ = request('/api/admin/products', 'POST', product, 201)
     request(f"/api/admin/products/{one_photo['id']}", 'DELETE', expected=204)
     product_id = saved['id']; created_products.append(product_id)
+    assert saved['brands'] == ['Test', 'Collab']
     assert saved['size'] == 'XL' and 'release_year' not in saved
+    for brand in ['Test', 'Collab']:
+        page=request('/api/products/page?'+urlencode({'limit':8,'brands':json.dumps([brand])}),auth=False)[0]
+        assert any(p['id']==product_id for p in page['items'])
+    incomplete_url='/api/admin/products/page?'+urlencode({'limit':4,'incomplete':'true','search':product['name']})
+    assert request(incomplete_url)[0]['total']==0
+    partial={**product,'size':'','brands':[' Test ','test','Collab']}
+    normalized=request(f'/api/admin/products/{product_id}','PUT',partial)[0]
+    assert normalized['brands']==['Test','Collab']
+    assert request(incomplete_url)[0]['total']==1
+    assert request(incomplete_url)[0]['items'][0]['id']==product_id
     request('/api/products?category=t-shirts')  # Warm the old cache before editing.
     product['name'] += ' edited'; product['category'] = 'accessories'; product['price_cents'] = 54321
     product['size'] = '42–44 / oversize'
@@ -205,6 +216,7 @@ try:
     public, _ = request(f'/api/products/{product_id}', auth=False)
     assert updated == public and public['name'] == product['name']
     assert public['size'] == product['size']
+    assert request(incomplete_url)[0]['total']==0
     request('/api/admin/products', 'POST', {**product, 'size':'x'*101}, 400)
     assert public['images'][1]['carousel'] is True and public['images'][0]['carousel'] is False
     archived_draft = {**product, 'category':'hoodies', 'sold':True}

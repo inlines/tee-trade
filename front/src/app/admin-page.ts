@@ -33,6 +33,8 @@ export class AdminPage {
   readonly notice = signal('');
   readonly tab = signal<'products' | 'archive' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
+  readonly incomplete = signal(false);
+  missing(product:Product){return [!product.name.trim()?'название':'',!product.category?'категория':'',!product.brands.length?'бренды':'',!product.size.trim()?'размер':'',!product.description.trim()?'описание':'',!product.theme.trim()?'тематика':'',product.price_cents===null?'цена':'',!product.images.length?'фотографии':''].filter(Boolean).join(', ');}
   readonly brands = signal<string[]>([]);
   readonly search = signal('');
   readonly filtered = this.products;
@@ -49,7 +51,7 @@ export class AdminPage {
     const generation=this.listGeneration;
     this.listLoading.set(true);this.listError.set('');
     try{
-      const page=await this.api.page(this.search(),this.tab()==='archive',window.matchMedia('(max-width:700px)').matches?4:8,this.offset);
+      const page=await this.api.page(this.search(),this.tab()==='archive',window.matchMedia('(max-width:700px)').matches?4:8,this.offset,this.tab()==='products'&&this.incomplete());
       if(generation!==this.listGeneration)return;
       this.offset+=page.items.length;this.total.set(page.total);this.hasMore.set(page.items.length>0&&this.offset<page.total);
       this.products.update(rows=>{const ids=new Set(rows.map(p=>p.id));return [...rows,...page.items.filter(p=>!ids.has(p.id))];});
@@ -67,12 +69,12 @@ export class AdminPage {
   draft: ProductDraft = this.emptyDraft();
 
   readonly queryParams=toSignal(this.route.queryParamMap);
-  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});effect(()=>{this.api.session();this.tab();this.search();untracked(()=>void this.resetProducts());});inject(DestroyRef).onDestroy(()=>this.listGeneration++);void this.initialize(); }
+  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});effect(()=>{this.api.session();this.tab();this.search();this.incomplete();untracked(()=>void this.resetProducts());});inject(DestroyRef).onDestroy(()=>this.listGeneration++);void this.initialize(); }
   selectTab(tab:'products'|'archive'|'storefront') {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
   }
-  private emptyDraft(): ProductDraft { return { name:'', category:'', brand:'', size:'', description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
+  private emptyDraft(): ProductDraft { return { name:'', category:'', brands:[], size:'', description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
   private async initialize() {
     try { await this.api.restore(); if (this.api.session()) await this.load(); }
     catch (error) { this.handleError(error); }

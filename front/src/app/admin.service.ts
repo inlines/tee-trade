@@ -5,7 +5,7 @@ import { Product, ProductImage } from './catalog';
 
 export interface AdminSession { username: string; csrf_token: string; }
 export interface ProductDraft {
-  name: string; category: string; brand: string; size: string; description: string;
+  name: string; category: string; brands: string[]; size: string; description: string;
   theme: string; price_cents: number | null; images: ProductImage[]; is_demo: boolean; sold: boolean;
 }
 export interface StorefrontSettings {
@@ -33,7 +33,7 @@ export class AdminService {
   }
   async logout() { await firstValueFrom(this.http.post('/api/admin/logout', {}, { headers: this.headers() })); this.session.set(null); }
   list() { return firstValueFrom(this.http.get<Product[]>('/api/admin/products')); }
-  page(search:string,sold:boolean,limit:number,offset:number){return firstValueFrom(this.http.get<{items:Product[];total:number}>('/api/admin/products/page',{params:{search,sold,limit,offset}}));}
+  page(search:string,sold:boolean,limit:number,offset:number,incomplete=false){return firstValueFrom(this.http.get<{items:Product[];total:number}>('/api/admin/products/page',{params:{search,sold,limit,offset,incomplete}}));}
   product(id:number){return firstValueFrom(this.http.get<Product>('/api/admin/products/'+id));}
   brands(){return firstValueFrom(this.http.get<string[]>('/api/admin/products/brands'));}
   labels(ids:number[]){return firstValueFrom(this.http.get<{id:number;name:string}[]>('/api/admin/products/labels',{params:{ids:JSON.stringify(ids)}}));}

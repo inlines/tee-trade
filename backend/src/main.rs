@@ -44,7 +44,7 @@ struct Product {
     name: String,
     price_cents: Option<i32>,
     category: String,
-    brand: String,
+    brands: Vec<String>,
     size: String,
     description: String,
     theme: String,
@@ -52,7 +52,7 @@ struct Product {
     is_demo: bool,
     sold: bool,
 }
-const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brand, size, description, theme, images, is_demo, sold";
+const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brands, size, description, theme, images, is_demo, sold";
 const CATEGORIES: [&str; 5] = ["sneakers", "t-shirts", "accessories", "headwear", "hoodies"];
 #[derive(Deserialize)]
 struct CatalogQuery {
@@ -154,12 +154,12 @@ async fn product_page(
     catalog_cache::get(&state, &key, async {
         let mut tx = state.db.begin().await.map_err(internal)?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY").execute(&mut *tx).await.map_err(internal)?;
-        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR lower(btrim(brand)) = ANY($3))")
+        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($3)))")
             .bind(&query.category).bind(query.sold).bind(&selected).fetch_one(&mut *tx).await.map_err(internal)?;
-        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR lower(btrim(brand)) = ANY($5)) ORDER BY {order} LIMIT $3 OFFSET $4"))
+        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($5))) ORDER BY {order} LIMIT $3 OFFSET $4"))
             .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).bind(&selected).fetch_all(&mut *tx).await.map_err(internal)?;
         // Facet excludes its own selection and pagination, but respects every other filter.
-        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
+        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
             .bind(&query.category).bind(query.sold).fetch_all(&mut *tx).await.map_err(internal)?;
         tx.commit().await.map_err(internal)?;
         Ok(ProductPage {items, total, brands})

@@ -33,9 +33,11 @@ class CatalogSmokeTest(unittest.TestCase):
             with self.subTest(product=product['id']):
                 detail = get_json('/api/products/' + str(product['id']))
                 self.assertEqual(product, detail)
-                for field in ('name', 'brand', 'description', 'theme'):
+                for field in ('name', 'description', 'theme'):
                     self.assertIsInstance(detail[field], str)
                 self.assertIsInstance(detail['size'], str)
+                self.assertIsInstance(detail['brands'], list)
+                self.assertTrue(all(isinstance(b,str) for b in detail['brands']))
                 if detail['price_cents'] is not None:
                     self.assertGreaterEqual(detail['price_cents'], 0)
                 self.assertLessEqual(len(detail['images']), 12)

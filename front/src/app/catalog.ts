@@ -12,7 +12,7 @@ export const categories = [
 ];
 export interface ProductImage { carousel?: boolean; url: string; alt: string; kind: 'front' | 'detail' | 'label'; }
 export interface Product {
-  id: number; name: string; price_cents: number | null; category: string; brand: string;
+  id: number; name: string; price_cents: number | null; category: string; brands: string[];
   size: string; description: string; theme: string; images: ProductImage[]; is_demo: boolean; sold: boolean;
 }
 export interface LoadState<T> { loading: boolean; data: T | null; error: string; notFound: boolean; }

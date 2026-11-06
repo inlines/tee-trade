@@ -247,6 +247,8 @@ struct ProductPageQuery {
     sold: bool,
     #[serde(default)]
     search: String,
+    #[serde(default)]
+    incomplete: bool,
 }
 #[derive(Serialize)]
 struct AdminProductPage {
@@ -269,7 +271,10 @@ async fn product_page(
         .execute(&mut *tx)
         .await
         .map_err(internal)?;
-    let filter = "sold=$1 AND strpos(lower(name || ' ' || brand),lower($2))>0";
+    let filter = "sold=$1 AND strpos(lower(name || ' ' || array_to_string(brands, ' ')),lower($2))>0";
+    let filter = if q.incomplete {
+        format!("{filter} AND (btrim(name)='' OR btrim(category)='' OR cardinality(brands)=0 OR btrim(size)='' OR btrim(description)='' OR btrim(theme)='' OR price_cents IS NULL OR jsonb_array_length(images)=0)")
+    } else { filter.to_owned() };
     let total = sqlx::query_scalar(&format!("SELECT count(*) FROM products WHERE {filter}"))
         .bind(q.sold)
         .bind(q.search.trim())
@@ -304,7 +309,7 @@ async fn product_detail(
     .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))
 }
 async fn brands(State(s): State<AppState>) -> Result<Json<Vec<String>>, ApiError> {
-    Ok(Json(sqlx::query_scalar("SELECT min(btrim(brand)) FROM products WHERE btrim(brand)<>'' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))").fetch_all(&s.db).await.map_err(internal)?))
+    Ok(Json(sqlx::query_scalar("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE btrim(brand)<>'' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))").fetch_all(&s.db).await.map_err(internal)?))
 }
 #[derive(Deserialize)]
 struct LabelQuery {
@@ -338,7 +343,7 @@ struct ProductInput {
     name: String,
     price_cents: Option<i32>,
     category: String,
-    brand: String,
+    brands: Vec<String>,
     size: String,
     description: String,
     theme: String,
@@ -346,6 +351,11 @@ struct ProductInput {
     #[serde(default)]
     is_demo: bool,
     sold: bool,
+}
+fn normalize_brands(input: &mut ProductInput) {
+    let mut seen = HashSet::new();
+    input.brands = input.brands.iter().map(|b| b.trim().to_owned())
+        .filter(|b| !b.is_empty() && seen.insert(b.to_lowercase())).collect();
 }
 fn text_valid(value: &str, max: usize) -> bool {
     !value.trim().is_empty() && value.chars().count() <= max
@@ -356,7 +366,7 @@ async fn validate_product(
     db: &PgPool,
 ) -> Result<(), ApiError> {
     if input.name.chars().count() > 160
-        || input.brand.chars().count() > 100
+        || input.brands.len() > 50 || input.brands.iter().any(|b| b.trim().is_empty() || b.chars().count() > 100)
         || input.size.chars().count() > 100
         || input.theme.chars().count() > 160
         || input.description.chars().count() > 10000
@@ -408,16 +418,17 @@ async fn validate_product(
 }
 async fn create(
     State(state): State<AppState>,
-    Json(input): Json<ProductInput>,
+    Json(mut input): Json<ProductInput>,
 ) -> Result<(StatusCode, Json<Product>), ApiError> {
     let mut tx = state.db.begin().await.map_err(internal)?;
     sqlx::query("SELECT id FROM catalog_revision FOR UPDATE")
         .fetch_one(&mut *tx)
         .await
         .map_err(internal)?;
+    normalize_brands(&mut input);
     validate_product(&input, None, &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brand, size, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brands, size, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(&input.brands).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await
@@ -504,7 +515,7 @@ async fn delete_product(
 async fn update(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-    Json(input): Json<ProductInput>,
+    Json(mut input): Json<ProductInput>,
 ) -> Result<Json<Product>, ApiError> {
     let mut tx = state.db.begin().await.map_err(internal)?;
     sqlx::query("SELECT id FROM catalog_revision FOR UPDATE")
@@ -519,9 +530,10 @@ async fn update(
     .await
     .map_err(internal)?
     .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
+    normalize_brands(&mut input);
     validate_product(&input, Some(&existing), &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brand=$4, size=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(input.brand.trim()).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brands=$4, size=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(&input.brands).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await
