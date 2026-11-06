@@ -154,6 +154,9 @@ export class CatalogPage {
           }</div>
         </div>
         <div class="product-info"><p class="eyebrow">{{ product.brands.join(' × ') }}{{ product.brands.length && product.size ? ' / ' : '' }}{{ product.size }}</p><h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
+          @if (admin.session()) {
+            <a class="text-link" routerLink="/admin" [queryParams]="{edit: product.id}">Редактировать товар</a>
+          }
           <dl><div><dt>Бренды</dt><dd>{{ product.brands.join(' × ') || 'Не указаны' }}</dd></div><div><dt>Размер</dt><dd>{{ product.size || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
           @if(product.sold){<p class="demo-note">Продано · Товар в архиве</p>}
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
