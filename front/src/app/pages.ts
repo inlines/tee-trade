@@ -154,9 +154,6 @@ export class CatalogPage {
           }</div>
         </div>
         <div class="product-info">@if (product.brands.length) { <p class="eyebrow">{{ product.brands.join(' × ') }}</p> }<h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
-          @if (admin.session()) {
-            <a class="text-link" routerLink="/admin" [queryParams]="{edit: product.id}">Редактировать товар</a>
-          }
           <dl><div><dt>Бренды</dt><dd>{{ product.brands.join(' × ') || 'Не указаны' }}</dd></div><div><dt>Размер</dt><dd>{{ product.size || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
           @if(product.sold){<p class="demo-note">Продано · Товар в архиве</p>}
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
@@ -167,6 +164,9 @@ export class CatalogPage {
           @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
           @if (!product.sold && customer.ready() && !customer.session() && !admin.session()) {
             <p class="seller-contact">Чтобы написать продавцу или оставить заявку, необходима <a class="text-link" routerLink="/account" [queryParams]="{returnTo:'/product/' + product.id}">регистрация</a>. Уже есть аккаунт? <a class="text-link" routerLink="/account" [queryParams]="{mode:'login', returnTo:'/product/' + product.id}">Войти</a></p>
+          }
+          @if (admin.session()) {
+            <a class="text-link back-link" routerLink="/admin" [queryParams]="{edit: product.id}">Редактировать товар</a>
           }
           <a class="text-link back-link" [routerLink]="backToCatalog(product)">← Назад в раздел</a>
         </div>
