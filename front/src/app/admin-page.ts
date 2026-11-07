@@ -101,7 +101,7 @@ export class AdminPage {
   private handleError(error: unknown) {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) this.api.session.set(null);
-      this.error.set(typeof error.error === 'string' && !error.error.startsWith('<') ? error.error : error.status === 413 ? 'Максимальный размер фотографии — 12 МБ.' : 'Не удалось выполнить запрос. Проверьте соединение и попробуйте снова.');
+      this.error.set(typeof error.error === 'string' && !error.error.startsWith('<') ? error.error : error.status === 413 ? 'Максимальный размер фотографии — 35 МБ.' : 'Не удалось выполнить запрос. Проверьте соединение и попробуйте снова.');
     } else this.error.set(error instanceof Error ? error.message : 'Не удалось выполнить действие.');
   }
   async login() {
@@ -150,7 +150,7 @@ export class AdminPage {
         this.uploadProgress.set(`Загружаем ${index+1} из ${files.length}: ${file.name}`);
         try {
           if(this.images().length>=12)throw new Error('Лимит — 12 фотографий на товар.');
-          if(file.size>12*1024*1024)throw new Error('Файл больше 12 МБ.');
+          if(file.size>35*1024*1024)throw new Error('Файл больше 35 МБ.');
           if(!['image/jpeg','image/png','image/webp'].includes(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name))throw new Error('Поддерживаются JPEG, PNG и WebP.');
           const {url}=await this.api.upload(file,percent=>this.uploadProgress.set(`${index+1} из ${files.length}: ${file.name} — ${percent>=100?'обработка на сервере':percent+'%'}`));
           const role=this.images().some(image=>image.kind==='front')?'detail':'front';

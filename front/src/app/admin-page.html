@@ -39,7 +39,7 @@
               <label class="check-label"><input type="checkbox" name="sold" [(ngModel)]="draft.sold">Продано — переместить в архив</label>
               <label class="check-label"><input type="checkbox" name="isDemo" [(ngModel)]="draft.is_demo">Демонстрационный товар</label>
             </div>
-            <section class="photos-editor"><h3>Фотографии</h3><p>Все поля необязательны. Можно добавить до 12 фотографий: JPEG, PNG или WebP, до 12 МБ каждая. Первая фотография станет обложкой; фото для главной можно выбрать отдельно.</p>
+            <section class="photos-editor"><h3>Фотографии</h3><p>Все поля необязательны. Можно добавить до 12 фотографий: JPEG, PNG или WebP, до 35 МБ каждая. Первая фотография станет обложкой; фото для главной можно выбрать отдельно.</p>
               <div class="photo-dropzone" [class.dragging]="dragging()" [class.disabled]="uploading() || busy()" (dragover)="dragOver($event)" (dragleave)="dragLeave($event)" (drop)="drop($event)">
                 <span class="drop-symbol" aria-hidden="true">＋</span><strong class="desktop-upload">Перетащите фотографии сюда</strong>
                 <p class="desktop-upload">или выберите несколько файлов</p>

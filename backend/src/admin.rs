@@ -96,7 +96,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .route("/api/admin/storefront", get(settings).put(save_settings))
         .route(
             "/api/admin/uploads",
-            post(upload).layer(DefaultBodyLimit::max(13 * 1024 * 1024)),
+            post(upload).layer(DefaultBodyLimit::max(36 * 1024 * 1024)),
         )
         .route_layer(middleware::from_fn_with_state(state, authorize));
     protected
@@ -558,10 +558,10 @@ async fn upload(
         .bytes()
         .await
         .map_err(|_| bad("Файл слишком большой или повреждён"))?;
-    if bytes.len() > 12 * 1024 * 1024 {
+    if bytes.len() > 35 * 1024 * 1024 {
         return Err((
             StatusCode::PAYLOAD_TOO_LARGE,
-            "Максимальный размер фото — 12 МБ",
+            "Максимальный размер фото — 35 МБ",
         ));
     }
     if multipart

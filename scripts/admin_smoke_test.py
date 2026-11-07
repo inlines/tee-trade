@@ -151,6 +151,14 @@ try:
     assert paging_ids[0] in [p['id'] for p in request('/api/products/page?category=hoodies&sold=true&limit=8&sort=price-asc',auth=False)[0]['items']]
     for pid in paging_ids: request(f'/api/admin/products/{pid}','DELETE',expected=204)
     print('PASS: 4/8 item pages, stable global sorting, limits, archive and page cache invalidation')
+    if os.environ.get('TEST_UPLOAD_LIMIT') == '1':
+        # Padding exercises the transport limit without allocating a huge decoded bitmap.
+        boundary_image = png().ljust(35 * 1024 * 1024, b'\0')
+        large_url = upload(boundary_image)
+        stored, _ = request(large_url, auth=False)
+        assert stored.startswith(b'\xff\xd8') and len(stored) < len(boundary_image)
+        upload(boundary_image + b'\0', 413)
+        print('PASS: 35 MiB accepted and recompressed; 35 MiB + 1 byte rejected')
     main_url = upload(png(800,600))
     label_url = upload(png())
     for _ in range(4): upload(png(800,600))
