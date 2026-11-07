@@ -1,3 +1,4 @@
+import { CatalogHistory, CatalogSnapshot } from './catalog-history';
 import { CatalogNavigation, parseCatalogNavigation } from './catalog-navigation';
 import { CatalogEnd } from './catalog-end';
 import { ProgressiveImage } from './progressive-image';
@@ -5,7 +6,7 @@ import { RequestsService } from './requests.service';
 import { RequestDialog } from './request-dialog';
 import { Component, computed, inject, signal, effect, DestroyRef, untracked } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
-import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { ActivatedRoute, NavigationStart, NavigationEnd, Scroll, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, of, startWith, Subject, switchMap, Subscription } from 'rxjs';
 import { CatalogService, categories, categoryName, loadState, LoadState, Product, previewUrl } from './catalog';
@@ -67,12 +68,36 @@ export class HomePage {
         <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" [catalogQuery]="productQuery(i)" /> } @empty { @if(!error()){ <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
         @if (loading()) { <p class="status" role="status">Загружаем вещи…</p> }
         @else if (error()) { <div class="status" role="alert"><p>{{error()}}</p><button class="button" (click)="loadMore()">Повторить</button></div> }
-        @else if (hasMore()) { <app-catalog-end (reached)="loadMore()" /> }
+        @else if (hasMore() && !restoring()) { <app-catalog-end (reached)="loadMore()" /> }
         @if (hasDemo()) { <p class="demo-note">Демо-коллекция: товары и иллюстрации показывают устройство каталога. Фотографии реальных вещей будут добавлены отдельно.</p> }
       }
     }`,
 })
 export class CatalogPage {
+  private readonly router = inject(Router);
+  private readonly history = inject(CatalogHistory);
+  readonly restoring = signal(false);
+  private entryId = this.router.getCurrentNavigation()?.id ?? window.history.state?.navigationId ?? 0;
+  private restoredId = this.history.restoredId;
+  private fromProduct = this.history.fromProduct;
+  private filterKey = '';
+  private restoreY: number | null = null;
+  private frame = 0;
+  private url() { return this.archived ? '/archive' : '/catalog'+(this.category()?'/'+this.category():''); }
+  private savePosition() {
+    if(!this.items().length)return;
+    this.history.save(this.entryId,{url:this.url(),items:this.items(),total:this.total(),offset:this.offset,
+      hasMore:this.hasMore(),sort:this.sort(),selectedBrands:this.selectedBrands(),brands:this.brands(),
+      brandsOpen:this.brandsOpen(),pageSize:this.pageSize,y:window.scrollY});
+  }
+  private restore(snapshot:CatalogSnapshot) {
+    this.request?.unsubscribe();
+    this.items.set(snapshot.items);this.total.set(snapshot.total);this.offset=snapshot.offset;
+    this.hasMore.set(snapshot.hasMore);this.sort.set(snapshot.sort);this.selectedBrands.set(snapshot.selectedBrands);
+    this.brands.set(snapshot.brands);this.brandsOpen.set(snapshot.brandsOpen);this.pageSize=snapshot.pageSize;
+    this.loading.set(false);this.error.set('');this.restoring.set(true);this.restoreY=snapshot.y;
+    this.filterKey=JSON.stringify([this.category(),snapshot.sort,snapshot.selectedBrands]);
+  }
   readonly categories = categories;
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(CatalogService);
@@ -99,9 +124,31 @@ export class CatalogPage {
   }
   private request?: Subscription;
   constructor() {
+    const events=this.router.events.subscribe(event=>{
+      if(event instanceof NavigationStart){
+        this.savePosition();
+        this.restoredId=event.restoredState?.navigationId;
+        this.fromProduct=this.router.url.startsWith('/product/');
+      }
+      if(event instanceof NavigationEnd)this.entryId=event.id;
+      if(event instanceof Scroll && this.restoreY!==null){
+        const y=this.restoreY;this.restoreY=null;
+        this.frame=requestAnimationFrame(()=>{
+          window.scrollTo({top:y,behavior:'instant'});
+          this.restoring.set(false);
+        });
+      }
+    });
     effect(() => {
-      const category=this.category(); this.sort(); this.selectedBrands();
+      const category=this.category(); const key=JSON.stringify([category,this.sort(),this.selectedBrands()]);
       untracked(() => {
+        if(key===this.filterKey)return;
+        const restoredId=this.restoredId;this.restoredId=undefined;
+        const snapshot=this.history.get(restoredId,this.url())
+          ?? (this.fromProduct?this.history.latest(this.url()):undefined);
+        this.fromProduct=false;
+        if(snapshot){this.lastCategory=category;this.restore(snapshot);return;}
+        this.filterKey=key;
         if(category!==this.lastCategory){ this.lastCategory=category; this.selectedBrands.set([]); this.brands.set([]); }
         this.request?.unsubscribe(); this.items.set([]); this.offset=0;
         this.pageSize=window.matchMedia('(max-width:700px)').matches?4:8;
@@ -109,7 +156,7 @@ export class CatalogPage {
         if(this.validCategory()) this.loadMore();
       });
     });
-    inject(DestroyRef).onDestroy(()=>this.request?.unsubscribe());
+    inject(DestroyRef).onDestroy(()=>{this.request?.unsubscribe();events.unsubscribe();cancelAnimationFrame(this.frame);});
   }
   loadMore() {
     if(this.loading() || !this.hasMore()) return;
