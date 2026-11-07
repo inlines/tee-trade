@@ -53,7 +53,7 @@ struct Product {
     sold: bool,
 }
 const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brands, size, description, theme, images, is_demo, sold";
-const CATEGORIES: [&str; 5] = ["sneakers", "t-shirts", "accessories", "headwear", "hoodies"];
+const CATEGORIES: [&str; 7] = ["sneakers", "t-shirts", "accessories", "headwear", "hoodies", "sweatshirts", "longsleeves"];
 #[derive(Deserialize)]
 struct CatalogQuery {
     category: Option<String>,

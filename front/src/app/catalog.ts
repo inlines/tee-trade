@@ -8,6 +8,8 @@ export const categories = [
   { slug: 't-shirts', name: 'Футболки', image: 't-shirt' },
   { slug: 'accessories', name: 'Аксессуары', image: 'tote' },
   { slug: 'hoodies', name: 'Худи', image: 't-shirt' },
+  { slug: 'sweatshirts', name: 'Свитшоты', image: 't-shirt' },
+  { slug: 'longsleeves', name: 'Лонгсливы', image: 't-shirt' },
   { slug: 'headwear', name: 'Головные уборы', image: 'cap' },
 ];
 export interface ProductImage { carousel?: boolean; url: string; alt: string; kind: 'front' | 'detail' | 'label'; }

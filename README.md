@@ -101,7 +101,8 @@ docker compose down
 
 - `/` — главная с разделами и подборкой товаров.
 - `/catalog` — весь каталог; `/catalog/sneakers`, `/catalog/t-shirts`,
-  `/catalog/accessories`, `/catalog/headwear` — отдельные категории.
+  `/catalog/accessories`, `/catalog/headwear`, `/catalog/hoodies`,
+  `/catalog/sweatshirts` (Свитшоты), `/catalog/longsleeves` (Лонгсливы) — отдельные категории.
 - `/product/:id` — описание, характеристики и галерея товара.
 - `/about` — о проекте.
 

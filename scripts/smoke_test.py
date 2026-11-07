@@ -21,7 +21,7 @@ class CatalogSmokeTest(unittest.TestCase):
     def test_categories_partition_catalog(self):
         all_products = get_json('/api/products')
         categorized = []
-        for category in ('sneakers', 't-shirts', 'accessories', 'headwear'):
+        for category in ('sneakers', 't-shirts', 'accessories', 'headwear', 'hoodies', 'sweatshirts', 'longsleeves'):
             products = get_json('/api/products?category=' + category)
             self.assertTrue(all(product['category'] == category for product in products))
             categorized.extend(product['id'] for product in products)
@@ -56,7 +56,7 @@ class CatalogSmokeTest(unittest.TestCase):
                 error.exception.close()
 
     def test_direct_navigation_serves_angular(self):
-        for path in ('/', '/catalog', '/catalog/sneakers', '/catalog/t-shirts', '/catalog/accessories', '/catalog/headwear', '/about', '/product/1'):
+        for path in ('/', '/catalog', '/catalog/sneakers', '/catalog/t-shirts', '/catalog/accessories', '/catalog/headwear', '/catalog/hoodies', '/catalog/sweatshirts', '/catalog/longsleeves', '/about', '/product/1'):
             with self.subTest(path=path), get(path) as response:
                 self.assertIn('<app-root>', response.read().decode())
 

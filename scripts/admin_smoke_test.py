@@ -102,6 +102,17 @@ try:
     request(f"/api/admin/products/{empty['id']}", 'PUT', {})
     request(f"/api/admin/products/{empty['id']}", 'DELETE', expected=204)
     print('PASS: create, retrieve and edit an entirely empty product')
+    category_product, _ = request('/api/admin/products', 'POST', {'name':fixture_user, 'category':'sweatshirts'}, 201)
+    created_products.append(category_product['id'])
+    for category, other in [('sweatshirts','longsleeves'),('longsleeves','sweatshirts')]:
+        updated, _ = request(f"/api/admin/products/{category_product['id']}", 'PUT', {'name':fixture_user,'category':category})
+        assert updated['category']==category
+        assert any(p['id']==updated['id'] for p in request('/api/products?category='+category,auth=False)[0])
+        assert all(p['id']!=updated['id'] for p in request('/api/products?category='+other,auth=False)[0])
+        page=request('/api/products/page?category='+category+'&limit=4',auth=False)[0]
+        assert any(p['id']==updated['id'] for p in page['items'])
+    request(f"/api/admin/products/{category_product['id']}", 'DELETE', expected=204)
+    print('PASS: sweatshirts and longsleeves creation, editing and separate catalog filters')
     paging_ids = []
     for i in range(10):
         item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brands':[f'{fixture_user} Brand {i%2}'], 'price_cents':(10-i)*100, 'size':str(40+i)}, 201)
