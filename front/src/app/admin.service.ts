@@ -34,6 +34,7 @@ export class AdminService {
   async logout() { await firstValueFrom(this.http.post('/api/admin/logout', {}, { headers: this.headers() })); this.session.set(null); }
   list() { return firstValueFrom(this.http.get<Product[]>('/api/admin/products')); }
   page(search:string,sold:boolean,limit:number,offset:number,incomplete=false){return firstValueFrom(this.http.get<{items:Product[];total:number}>('/api/admin/products/page',{params:{search,sold,limit,offset,incomplete}}));}
+  saveOrder(original_ids:number[],ids:number[]){return firstValueFrom(this.http.put<void>('/api/admin/products/order',{original_ids,ids},{headers:this.headers()}));}
   product(id:number){return firstValueFrom(this.http.get<Product>('/api/admin/products/'+id));}
   sizes(){return firstValueFrom(this.http.get<string[]>("/api/admin/products/sizes"));}
   brands(){return firstValueFrom(this.http.get<string[]>('/api/admin/products/brands'));}

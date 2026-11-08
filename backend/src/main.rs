@@ -89,7 +89,7 @@ async fn products(
     );
     catalog_cache::get(&state, &resource, async {
         sqlx::query_as::<_, Product>(&format!(
-            "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) AND sold=$2 ORDER BY id"
+            "SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category = $1) AND sold=$2 ORDER BY catalog_position, id"
         )).bind(query.category).bind(query.sold).fetch_all(&state.db).await.map_err(internal)
     }).await.map(Json)
 }
@@ -141,7 +141,7 @@ async fn product_page(
     let selected = parse_filter(query.brands.as_deref())?;
     let selected_sizes = parse_filter(query.sizes.as_deref())?;
     let order = match query.sort.as_str() {
-        "" | "default" => "id ASC",
+        "" | "default" => "catalog_position ASC, id ASC",
         "price-asc" => "price_cents ASC NULLS LAST, id ASC",
         "price-desc" => "price_cents DESC NULLS LAST, id ASC",
         _ => return Err((StatusCode::BAD_REQUEST, "Unknown sort")),

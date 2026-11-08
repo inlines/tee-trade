@@ -6,7 +6,7 @@ const api={session:()=>({}),page(...args){return new Promise((resolve,reject)=>c
 const exported={};
 const source='export class AdminPage {'+fs.readFileSync('front/src/app/admin-page.ts','utf8').split('export class AdminPage {')[1];
 vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{
- exports:exported,signal,effect:()=>{},untracked:f=>f(),toSignal:()=>()=>null,categories:[],
+ exports:exported,HostListener:()=>()=>{},cancelAnimationFrame:()=>{},signal,effect:()=>{},untracked:f=>f(),toSignal:()=>()=>null,categories:[],
  AdminService:'api',ChatService:'chat',ActivatedRoute:'route',Router:'router',DestroyRef:'destroy',
  inject:t=>t==='api'?api:t==='destroy'?{onDestroy(){}}:t==='route'?{snapshot:{queryParamMap:{get:()=>null}}}:{},
  window:{matchMedia:()=>({matches:mobile})}
@@ -19,6 +19,9 @@ exported.AdminPage.prototype.initialize=async()=>{};
  calls[1].reject(Error());await load;assert.equal(page.products().length,8);assert.ok(page.listError());
  load=page.loadMore();calls[2].resolve({items:[9,10,11,12].map(id=>({id,name:''})),total:12});await load;
  assert.equal(page.products().map(p=>p.id).join(','),'1,2,3,4,5,6,7,8,9,10,11,12');assert.equal(page.hasMore(),false);
+ page.moveProduct(0,9);assert.equal(page.products()[9].id,1);assert.equal(page.orderDirty(),true);
+ page.moveProduct(9,0);assert.equal(page.orderDirty(),false);
+ page.search.set('filter');page.moveProduct(0,1);assert.equal(page.products()[0].id,1);page.search.set('');
  mobile=true;page.tab.set('archive');load=page.resetProducts();assert.equal(calls[3].args[1],true);assert.equal(calls[3].args[2],4);
  page.search.set('different');const newer=page.resetProducts();calls[4].resolve({items:[{id:99,name:'new'}],total:1});await newer;
  calls[3].resolve({items:[{id:98,name:'stale'}],total:1});await load;assert.equal(page.products()[0].id,99);

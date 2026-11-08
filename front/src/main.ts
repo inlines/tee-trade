@@ -26,7 +26,7 @@ const routes: Routes = [
   { path: 'product/:id', component: ProductPage, title: 'Товар — FUTBA' },
   { path: 'about', loadComponent: () => import('./app/about-page').then(m => m.AboutPage), title: 'О нас — FUTBA' },
   { path: 'account', loadComponent: () => import('./app/account-page').then(module => module.AccountPage), title: 'Аккаунт — FUTBA' },
-  { path: 'admin', loadComponent: () => import('./app/admin-page').then(module => module.AdminPage), title: 'Управление — FUTBA' },
+  { path: 'admin', canDeactivate: [(component: {canLeave():boolean}) => component.canLeave()], loadComponent: () => import('./app/admin-page').then(module => module.AdminPage), title: 'Управление — FUTBA' },
   { path: '**', loadComponent: () => import('./app/not-found-page').then(m => m.NotFoundPage), title: 'Страница не найдена — FUTBA' },
 ];
 @Component({

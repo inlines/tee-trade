@@ -1,6 +1,6 @@
-<section class="admin-page">
+<section class="admin-page" [class.order-pending]="orderDirty()">
   <div class="admin-heading"><div><p class="eyebrow">FUTBA / УПРАВЛЕНИЕ</p><h1>Администратор</h1></div>
-    @if (api.session(); as session) { <div class="account"><span>{{ session.username }}</span><button class="button" (click)="logout()" [disabled]="busy() || uploading()">Выйти</button></div> }
+    @if (api.session(); as session) { <div class="account"><span>{{ session.username }}</span><button class="button" (click)="logout()" [disabled]="busy() || uploading() || orderDirty()">Выйти</button></div> }
   </div>
   @if (checking()) { <p class="status" role="status">Проверяем сессию…</p> }
   @else if (!api.session()) {
@@ -12,27 +12,30 @@
       <button class="button dark" type="submit" [disabled]="busy() || loginForm.invalid">{{ busy() ? 'Входим…' : 'Войти' }}</button>
     </form>
   } @else {
-    <nav class="admin-tabs" aria-label="Разделы управления"><button [class.active]="tab() === 'products'" (click)="selectTab('products')">Товары</button><button [class.active]="tab() === 'archive'" (click)="selectTab('archive')">Архив</button><button [class.active]="tab() === 'storefront'" (click)="selectTab('storefront')">Главная страница</button><button [class.active]="tab() === 'requests'" (click)="tab.set('requests')">Заявки</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
+    <nav class="admin-tabs" aria-label="Разделы управления"><button [disabled]="orderDirty() || busy()" [class.active]="tab() === 'products'" (click)="selectTab('products')">Товары</button><button [disabled]="orderDirty() || busy()" [class.active]="tab() === 'archive'" (click)="selectTab('archive')">Архив</button><button [disabled]="orderDirty() || busy()" [class.active]="tab() === 'storefront'" (click)="selectTab('storefront')">Главная страница</button><button [disabled]="orderDirty() || busy()" [class.active]="tab() === 'requests'" (click)="tab.set('requests')">Заявки</button><a routerLink="/" target="_blank" rel="noopener">Открыть магазин</a></nav>
     @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
     @if (notice()) { <p class="form-success" role="status">{{ notice() }}</p> }
     @if (tab() === 'requests') { <app-request-list [admin]="true" /> }
     @if (tab() === 'products' || tab() === 'archive') {
       @if (!editor() || tab() === 'archive') {
-        @if(tab()==='products'){<nav class="admin-tabs" aria-label="Списки товаров"><button [class.active]="!incomplete()" (click)="incomplete.set(false)">Все товары</button><button [class.active]="incomplete()" (click)="incomplete.set(true)">Требуют уточнения</button></nav>}
-        <div class="admin-toolbar"><label>Поиск товара<input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label>@if(tab() === 'products'){<button class="button dark" [disabled]="busy() || uploading()" (click)="startEdit()">Добавить товар +</button>}</div>
-        <div class="admin-products">@for (product of filtered(); track product.id) {
-          <article class="admin-product"><img [src]="productCover(product)" [alt]="product.name" width="72" height="80" loading="lazy" decoding="async"><div><h3>{{ product.name || 'Без названия' }}</h3>@if(product.sold){<span>Продано · Архив</span>}<p>{{ product.brands.join(' × ') }} · {{ categoryName(product.category) }} · №{{ product.id }}</p>@if(incomplete()&&tab()==='products'){<p>Не указано: {{missing(product)}}</p>}</div><span>{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</span>@if(tab() === 'products'){<button class="button" [disabled]="busy() || uploading()" (click)="startEdit(product)">Редактировать</button><button class="button" [disabled]="busy() || uploading()" (click)="archiveProduct(product)">Перенести в архив</button>}<button class="button danger" [disabled]="busy() || uploading()" [attr.aria-label]="'Удалить товар ‘' + product.name + '’'" (click)="deleteProduct(product)">Удалить</button></article>
+        @if(tab()==='products'){<nav class="admin-tabs" aria-label="Списки товаров"><button [disabled]="orderDirty() || busy()" [class.active]="!incomplete()" (click)="incomplete.set(false)">Все товары</button><button [disabled]="orderDirty() || busy()" [class.active]="incomplete()" (click)="incomplete.set(true)">Требуют уточнения</button></nav>}
+        <div class="admin-toolbar"><label>Поиск товара<input [disabled]="orderDirty() || busy()" type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label>@if(tab() === 'products'){<button class="button dark" [disabled]="busy() || uploading() || orderDirty()" (click)="startEdit()">Добавить товар +</button>}</div>
+        @if(canReorder()){<p class="order-hint">Порядок как в каталоге. Меняйте товары местами стрелками или перетаскивайте за ⠿. Для перемещения дальше прокрутите список и загрузите следующие товары.</p>}
+        <div class="admin-products">@for (product of filtered(); track product.id; let i = $index) {
+          <article class="admin-product" [class.product-dragging]="draggedProduct()===product.id" [attr.data-product-order-id]="product.id">
+          @if(canReorder()){<div class="catalog-order-controls"><button type="button" class="drag-handle" [disabled]="busy()" (pointerdown)="beginProductDrag($event,product.id)" aria-label="Перетащить товар" title="Перетащить">⠿</button><button type="button" [disabled]="busy() || i===0" (click)="moveProduct(i,i-1)" aria-label="Товар раньше">↑</button><button type="button" [disabled]="busy() || i===products().length-1" (click)="moveProduct(i,i+1)" aria-label="Товар позже">↓</button></div>}
+          <img [draggable]="false" [src]="productCover(product)" [alt]="product.name" width="72" height="80" loading="lazy" decoding="async"><div><h3>{{ product.name || 'Без названия' }}</h3>@if(product.sold){<span>Продано · Архив</span>}<p>{{ product.brands.join(' × ') }} · {{ categoryName(product.category) }} · №{{ product.id }}</p>@if(incomplete()&&tab()==='products'){<p>Не указано: {{missing(product)}}</p>}</div><span>{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</span>@if(tab() === 'products'){<button class="button" [disabled]="busy() || uploading() || orderDirty()" (click)="startEdit(product)">Редактировать</button><button class="button" [disabled]="busy() || uploading() || orderDirty()" (click)="archiveProduct(product)">Перенести в архив</button>}<button class="button danger" [disabled]="busy() || uploading() || orderDirty()" [attr.aria-label]="'Удалить товар ‘' + product.name + '’'" (click)="deleteProduct(product)">Удалить</button></article>
         } @empty { @if(!listLoading()&&!listError()){<p class="status">Товары не найдены.</p>} }</div>
         @if(listLoading()){<p role="status">Загружаем товары…</p>}@else if(listError()){<p role="alert">{{listError()}}</p><button class="button" (click)="loadMore()">Повторить</button>}@else if(hasMore()){<app-catalog-end (reached)="loadMore()" />}
       } @else {
-        <div class="editor-heading"><h2>{{ editId() === null ? 'Новый товар' : 'Редактирование товара' }}</h2><button type="button" class="text-link" (click)="closeEditor()" [disabled]="busy() || uploading()">← К списку</button></div>
+        <div class="editor-heading"><h2>{{ editId() === null ? 'Новый товар' : 'Редактирование товара' }}</h2><button type="button" class="text-link" (click)="closeEditor()" [disabled]="busy() || uploading() || orderDirty()">← К списку</button></div>
         <form #productForm="ngForm" (ngSubmit)="saveProduct()" (input)="dirtyProduct.set(true)" (change)="dirtyProduct.set(true)">
-          <fieldset [disabled]="busy() || uploading()">
+          <fieldset [disabled]="busy() || uploading() || orderDirty()">
             <div class="form-grid">
               <label>Название<input name="name" [(ngModel)]="draft.name" maxlength="160"></label>
               <label>Категория<select name="category" [(ngModel)]="draft.category"><option value="">Не указана</option>@for (category of categories; track category.slug) { <option [value]="category.slug">{{ category.name }}</option> }</select></label>
-              <app-brand-picker [value]="draft.brands" [brands]="brands()" [disabled]="busy() || uploading()" (valueChange)="draft.brands=$event; dirtyProduct.set(true)" />
-              <app-size-picker [value]="draft.sizes" [sizes]="sizes()" [disabled]="busy() || uploading()" (valueChange)="draft.sizes=$event; dirtyProduct.set(true)" />
+              <app-brand-picker [value]="draft.brands" [brands]="brands()" [disabled]="busy() || uploading() || orderDirty()" (valueChange)="draft.brands=$event; dirtyProduct.set(true)" />
+              <app-size-picker [value]="draft.sizes" [sizes]="sizes()" [disabled]="busy() || uploading() || orderDirty()" (valueChange)="draft.sizes=$event; dirtyProduct.set(true)" />
               <label>Тематика<input name="theme" [(ngModel)]="draft.theme" maxlength="160"></label>
               <label>Цена, ₽<input name="price" type="number" [(ngModel)]="price" min="0" max="21474836.47" step="0.01"></label>
               <label class="full-width">Описание<textarea name="description" [(ngModel)]="draft.description" maxlength="10000" rows="7"></textarea></label>
@@ -71,7 +74,7 @@
         <div class="save-row"><button type="submit" class="button dark" [disabled]="busy() || settingsForm.invalid">{{ busy() ? 'Сохраняем…' : 'Сохранить витрину' }}</button>@if (dirtySettings()) { <span>Есть несохранённые изменения</span> }</div>
       </form>
       <section class="settings-section"><h2>Добавить товары на главную</h2>
-        <label>Поиск товара<input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label>
+        <label>Поиск товара<input [disabled]="orderDirty() || busy()" type="search" [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Название или бренд"></label>
         <div class="admin-products">@for(product of products();track product.id){<article class="admin-product"><img [src]="productCover(product)" [alt]="product.name" width="72" height="80" loading="lazy"><div><h3>{{product.name||'Без названия'}}</h3><p>№{{product.id}}</p></div><button class="button" [disabled]="busy()||config.carousel_product_ids.includes(product.id)||config.carousel_product_ids.length>=24" (click)="addSelection('carousel_product_ids',''+product.id)">В галерею</button><button class="button" [disabled]="busy()||config.featured_product_ids.includes(product.id)||config.featured_product_ids.length>=24" (click)="addSelection('featured_product_ids',''+product.id)">В подборку</button></article>}@empty{@if(!listLoading()&&!listError()){<p>Товары не найдены.</p>}}</div>
         @if(listLoading()){<p role="status">Загружаем товары…</p>}@else if(listError()){<p role="alert">{{listError()}}</p><button class="button" (click)="loadMore()">Повторить</button>}@else if(hasMore()){<app-catalog-end (reached)="loadMore()" />}
       </section>
@@ -79,3 +82,11 @@
     }
   }
 </section>
+
+@if(orderDirty()){
+  <div class="catalog-order-save" role="region" aria-label="Сохранение сортировки">
+    <div><strong>Порядок товаров изменён</strong><p role="status">{{error() || 'Изменения появятся в каталоге после сохранения.'}}</p></div>
+    <button class="button" [disabled]="busy()" (click)="cancelOrder()">Отменить</button>
+    <button class="button dark" [disabled]="busy() || listLoading()" (click)="saveOrder()">{{busy()?'Сохраняем…':'Сохранить сортировку'}}</button>
+  </div>
+}

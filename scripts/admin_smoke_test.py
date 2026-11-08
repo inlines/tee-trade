@@ -133,7 +133,7 @@ try:
             page=request('/api/admin/products/page?'+urlencode({'limit':size,'offset':offset,'search':fixture_user}),auth=True)[0]
             assert page['total']==10
             loaded.extend(p['id'] for p in page['items'])
-        assert loaded==list(reversed(paging_ids))
+        assert loaded==paging_ids
     request('/api/admin/products/page?limit=8',expected=401,auth=False)
     request('/api/admin/products/page?limit=100',expected=400)
     assert request(f'/api/admin/products/{paging_ids[0]}')[0]['id']==paging_ids[0]

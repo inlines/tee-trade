@@ -4,7 +4,7 @@ import { BrandPicker } from './brand-picker';
 import { RequestList } from './request-list';
 import { effect, untracked, DestroyRef } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Component, inject, signal } from '@angular/core';
+import { Component, HostListener, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -34,6 +34,57 @@ export class AdminPage {
   readonly notice = signal('');
   readonly tab = signal<'products' | 'archive' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
+  readonly orderDirty = signal(false);
+  readonly draggedProduct = signal<number | null>(null);
+  private originalOrder: number[] = [];
+  private dragPointer: number | null = null;
+  private dragY = 0;
+  private dragX = 0;
+  private dragFrame = 0;
+  canReorder(){return this.tab()==='products' && !this.incomplete() && !this.search().trim() && !this.editor();}
+  moveProduct(from:number,to:number){
+    if(!this.canReorder()||this.busy()||from===to||to<0||to>=this.products().length)return;
+    const rows=[...this.products()];const [row]=rows.splice(from,1);rows.splice(to,0,row);this.products.set(rows);
+    this.orderDirty.set(rows.some((p,i)=>p.id!==this.originalOrder[i]));this.notice.set('');
+  }
+  beginProductDrag(event:PointerEvent,id:number){
+    if(!this.canReorder()||this.busy()||event.button!==0)return;
+    event.preventDefault();this.dragPointer=event.pointerId;this.draggedProduct.set(id);
+    this.dragX=event.clientX;this.dragY=event.clientY;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    const tick=()=>{
+      if(this.dragPointer===null)return;
+      const edge=90;const delta=this.dragY<edge?-12:this.dragY>window.innerHeight-edge?12:0;
+      if(delta){window.scrollBy(0,delta);this.dragOverProduct();}
+      this.dragFrame=requestAnimationFrame(tick);
+    };this.dragFrame=requestAnimationFrame(tick);
+  }
+  private dragOverProduct(){
+    const node=document.elementFromPoint(this.dragX,this.dragY)?.closest<HTMLElement>('[data-product-order-id]');
+    if(!node)return;
+    const rows=this.products();const from=rows.findIndex(p=>p.id===this.draggedProduct());
+    const to=rows.findIndex(p=>p.id===Number(node.dataset['productOrderId']));
+    if(from>=0&&to>=0)this.moveProduct(from,to);
+  }
+  @HostListener('document:pointermove',['$event']) moveProductPointer(event:PointerEvent){
+    if(event.pointerId!==this.dragPointer)return;
+    this.dragX=event.clientX;this.dragY=event.clientY;this.dragOverProduct();
+  }
+  @HostListener('document:pointerup',['$event'])
+  @HostListener('document:pointercancel',['$event']) endProductPointer(event:PointerEvent){
+    if(event.pointerId===this.dragPointer)this.stopProductDrag();
+  }
+  private stopProductDrag(){this.dragPointer=null;this.draggedProduct.set(null);cancelAnimationFrame(this.dragFrame);}
+  @HostListener('window:beforeunload',['$event']) protectOrder(event:BeforeUnloadEvent){if(this.orderDirty()){event.preventDefault();event.returnValue='';}}
+  canLeave(){return !this.orderDirty()||window.confirm('Уйти без сохранения сортировки?');}
+  async cancelOrder(){this.stopProductDrag();await this.resetProducts();}
+  async saveOrder(){
+    if(!this.orderDirty()||this.busy()||this.listLoading())return;
+    this.stopProductDrag();this.busy.set(true);this.error.set('');
+    try{await this.api.saveOrder(this.originalOrder,this.products().map(p=>p.id));this.originalOrder=this.products().map(p=>p.id);this.orderDirty.set(false);this.notice.set('Сортировка сохранена. Каталог обновлён.');}
+    catch(error){this.handleError(error);}
+    finally{this.busy.set(false);}
+  }
   readonly incomplete = signal(false);
   missing(product:Product){return [!product.name.trim()?'название':'',!product.category?'категория':'',!product.brands.length?'бренды':'',!product.sizes.length?'размеры':'',!product.description.trim()?'описание':'',!product.theme.trim()?'тематика':'',product.price_cents===null?'цена':'',!product.images.length?'фотографии':''].filter(Boolean).join(', ');}
   readonly sizes = signal<string[]>([]);
@@ -47,14 +98,15 @@ export class AdminPage {
   private offset=0;
   private listGeneration=0;
   private names = signal(new Map<number,string>());
-  async resetProducts(){this.listGeneration++;this.offset=0;this.products.set([]);this.total.set(0);this.hasMore.set(true);this.listLoading.set(false);this.listError.set('');if(this.api.session()&&this.tab()!=='requests')await this.loadMore();}
+  async resetProducts(){this.stopProductDrag();this.orderDirty.set(false);this.originalOrder=[];this.listGeneration++;this.offset=0;this.products.set([]);this.total.set(0);this.hasMore.set(true);this.listLoading.set(false);this.listError.set('');if(this.api.session()&&this.tab()!=='requests')await this.loadMore();}
   async loadMore(){
-    if(this.listLoading()||!this.hasMore())return;
+    if((this.orderDirty()&&this.busy())||this.listLoading()||!this.hasMore())return;
     const generation=this.listGeneration;
     this.listLoading.set(true);this.listError.set('');
     try{
       const page=await this.api.page(this.search(),this.tab()==='archive',window.matchMedia('(max-width:700px)').matches?4:8,this.offset,this.tab()==='products'&&this.incomplete());
       if(generation!==this.listGeneration)return;
+      this.originalOrder.push(...page.items.filter(p=>!this.originalOrder.includes(p.id)).map(p=>p.id));
       this.offset+=page.items.length;this.total.set(page.total);this.hasMore.set(page.items.length>0&&this.offset<page.total);
       this.products.update(rows=>{const ids=new Set(rows.map(p=>p.id));return [...rows,...page.items.filter(p=>!ids.has(p.id))];});
       this.names.update(names=>{const next=new Map(names);page.items.forEach(p=>next.set(p.id,p.name));return next;});
@@ -71,7 +123,7 @@ export class AdminPage {
   draft: ProductDraft = this.emptyDraft();
 
   readonly queryParams=toSignal(this.route.queryParamMap);
-  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});effect(()=>{this.api.session();this.tab();this.search();this.incomplete();untracked(()=>void this.resetProducts());});inject(DestroyRef).onDestroy(()=>this.listGeneration++);void this.initialize(); }
+  constructor() { effect(()=>{if(this.queryParams()?.has('request'))this.tab.set('requests');});effect(()=>{this.api.session();this.tab();this.search();this.incomplete();untracked(()=>void this.resetProducts());});inject(DestroyRef).onDestroy(()=>{this.listGeneration++;this.stopProductDrag();});void this.initialize(); }
   selectTab(tab:'products'|'archive'|'storefront') {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
@@ -113,7 +165,7 @@ export class AdminPage {
     finally { this.busy.set(false); }
   }
   async logout() {
-    if ((this.dirtyProduct() || this.dirtySettings()) && !window.confirm('Выйти без сохранения изменений?')) return;
+    if ((this.dirtyProduct() || this.dirtySettings() || this.orderDirty()) && !window.confirm('Выйти без сохранения изменений?')) return;
     this.busy.set(true); this.error.set('');
     try { await this.api.logout(); this.editor.set(false); this.images.set([]); this.products.set([]); this.settings.set(null); this.notice.set(''); this.dirtyProduct.set(false); this.dirtySettings.set(false); }
     catch (error) { this.handleError(error); }

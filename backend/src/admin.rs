@@ -86,6 +86,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .route("/api/admin/logout", post(logout))
         .route("/api/admin/products", get(list).post(create))
         .route("/api/admin/products/page", get(product_page))
+        .route("/api/admin/products/order", axum::routing::put(save_product_order))
         .route("/api/admin/products/brands", get(brands))
         .route("/api/admin/products/sizes", get(sizes))
         .route("/api/admin/products/labels", get(product_labels))
@@ -234,7 +235,7 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Res
 async fn list(State(state): State<AppState>) -> Result<Json<Vec<Product>>, ApiError> {
     Ok(Json(
         sqlx::query_as::<_, Product>(&format!(
-            "SELECT {PRODUCT_COLUMNS} FROM products ORDER BY id DESC"
+            "SELECT {PRODUCT_COLUMNS} FROM products ORDER BY catalog_position, id"
         ))
         .fetch_all(&state.db)
         .await
@@ -285,7 +286,7 @@ async fn product_page(
         .await
         .map_err(internal)?;
     let items = sqlx::query_as(&format!(
-        "SELECT {PRODUCT_COLUMNS} FROM products WHERE {filter} ORDER BY id DESC LIMIT $3 OFFSET $4"
+        "SELECT {PRODUCT_COLUMNS} FROM products WHERE {filter} ORDER BY catalog_position, id LIMIT $3 OFFSET $4"
     ))
     .bind(q.sold)
     .bind(q.search.trim())
@@ -297,6 +298,40 @@ async fn product_page(
     tx.commit().await.map_err(internal)?;
     Ok(Json(AdminProductPage { items, total }))
 }
+#[derive(Deserialize)]
+struct ProductOrderInput {
+    original_ids: Vec<i32>,
+    ids: Vec<i32>,
+}
+async fn save_product_order(
+    State(s): State<AppState>,
+    Json(input): Json<ProductOrderInput>,
+) -> Result<StatusCode, ApiError> {
+    let mut expected = input.original_ids.clone();
+    let mut proposed = input.ids.clone();
+    expected.sort_unstable();
+    proposed.sort_unstable();
+    if expected.is_empty() || expected != proposed || expected.windows(2).any(|w| w[0] == w[1]) {
+        return Err(bad("Некорректный список товаров"));
+    }
+    let mut tx = s.db.begin().await.map_err(internal)?;
+    // Serialize with product CRUD and storefront changes, including concurrent admins.
+    sqlx::query("SELECT id FROM catalog_revision FOR UPDATE")
+        .fetch_one(&mut *tx).await.map_err(internal)?;
+    let rows: Vec<(i32, i64)> = sqlx::query_as(
+        "SELECT id, catalog_position FROM products WHERE NOT sold ORDER BY catalog_position, id LIMIT $1"
+    ).bind(input.ids.len() as i64).fetch_all(&mut *tx).await.map_err(internal)?;
+    if rows.iter().map(|row| row.0).collect::<Vec<_>>() != input.original_ids {
+        return Err((StatusCode::CONFLICT, "Список товаров изменился. Отмените перестановки, обновите список и повторите."));
+    }
+    let positions: Vec<i64> = rows.iter().map(|row| row.1).collect();
+    sqlx::query("UPDATE products p SET catalog_position = o.position FROM unnest($1::int[], $2::bigint[]) AS o(id, position) WHERE p.id=o.id")
+        .bind(&input.ids).bind(&positions).execute(&mut *tx).await.map_err(internal)?;
+    sqlx::query("UPDATE catalog_revision SET version=version+1").execute(&mut *tx).await.map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn product_detail(
     State(s): State<AppState>,
     Path(id): Path<i32>,
