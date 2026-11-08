@@ -10,7 +10,7 @@ vm.runInNewContext(compile(fs.readFileSync('front/src/app/catalog-navigation.ts'
 const context = {category:'t-shirts',sold:false,sort:'price-desc',brands:['Brand'],sizes:['US 9','EU 42'],limit:4,index:3,total:10};
 assert.equal(parsed.parseCatalogNavigation(JSON.stringify(context)).index,3);
 for (const value of [null,'{','null',JSON.stringify({...context,index:-1}),JSON.stringify({...context,limit:100}),JSON.stringify({...context,brands:[1]}),JSON.stringify({...context,sizes:[1]})]) assert.equal(parsed.parseCatalogNavigation(value),null);
-const source = fs.readFileSync('front/src/app/pages.ts','utf8').split('export class ProductPage {')[1].split('\n@Component')[0];
+const source = fs.readFileSync('front/src/app/product-page.ts','utf8').split('export class ProductPage {')[1].split('\n@Component')[0];
 class Element { constructor(interactive=false) {this.interactive=interactive;} closest(){return this.interactive;} }
 const exported = {};
 vm.runInNewContext(compile('export class ProductPage {'+source), {exports:exported,Element});

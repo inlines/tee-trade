@@ -116,7 +116,9 @@ async fn register(
         return Err((StatusCode::CONFLICT, "Этот логин уже занят"));
     }
     let password = credentials.password;
+    let permit = state.auth_work.clone().try_acquire_owned().map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "Сервер занят. Попробуйте ещё раз"))?;
     let hash = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         Argon2::default()
             .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
             .map(|value| value.to_string())
@@ -159,7 +161,9 @@ async fn login(
             .await
             .map_err(internal)?,
     };
+    let permit = state.auth_work.clone().try_acquire_owned().map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "Сервер занят. Попробуйте ещё раз"))?;
     let valid = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         PasswordHash::new(&hash).is_ok_and(|hash| {
             Argon2::default()
                 .verify_password(credentials.password.as_bytes(), &hash)

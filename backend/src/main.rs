@@ -21,6 +21,9 @@ use sqlx::PgPool;
 struct AppState {
     db: PgPool,
     cache: redis::Client,
+    cache_connection: std::sync::Arc<tokio::sync::OnceCell<redis::aio::ConnectionManager>>,
+    auth_work: std::sync::Arc<tokio::sync::Semaphore>,
+    image_work: std::sync::Arc<tokio::sync::Semaphore>,
     registry: Registry,
     requests: IntCounterVec,
     monitoring: monitoring::Metrics,
@@ -29,6 +32,11 @@ struct AppState {
     request_events: tokio::sync::broadcast::Sender<i64>,
     chat_updates: tokio::sync::broadcast::Sender<i64>,
     chat_events: tokio::sync::broadcast::Sender<chat::Event>,
+}
+impl AppState {
+    async fn redis_connection(&self) -> redis::RedisResult<redis::aio::ConnectionManager> {
+        self.cache_connection.get_or_try_init(|| self.cache.get_connection_manager()).await.cloned()
+    }
 }
 #[derive(Serialize, Deserialize)]
 struct ProductImage {
@@ -151,14 +159,14 @@ async fn product_page(
     catalog_cache::get(&state, &key, async {
         let mut tx = state.db.begin().await.map_err(internal)?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY").execute(&mut *tx).await.map_err(internal)?;
-        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($3))) AND (cardinality($4::text[])=0 OR EXISTS (SELECT 1 FROM unnest(sizes) s WHERE lower(btrim(s))=ANY($4)))")
+        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR catalog_terms(brands) && $3) AND (cardinality($4::text[])=0 OR catalog_terms(sizes) && $4)")
             .bind(&query.category).bind(query.sold).bind(&selected).bind(&selected_sizes).fetch_one(&mut *tx).await.map_err(internal)?;
-        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($5))) AND (cardinality($6::text[])=0 OR EXISTS (SELECT 1 FROM unnest(sizes) s WHERE lower(btrim(s))=ANY($6))) ORDER BY {order} LIMIT $3 OFFSET $4"))
+        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR catalog_terms(brands) && $5) AND (cardinality($6::text[])=0 OR catalog_terms(sizes) && $6) ORDER BY {order} LIMIT $3 OFFSET $4"))
             .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).bind(&selected).bind(&selected_sizes).fetch_all(&mut *tx).await.map_err(internal)?;
         // Facet excludes its own selection and pagination, but respects every other filter.
-        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' AND (cardinality($3::text[])=0 OR EXISTS (SELECT 1 FROM unnest(sizes) s WHERE lower(btrim(s))=ANY($3))) GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
+        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' AND (cardinality($3::text[])=0 OR catalog_terms(sizes) && $3) GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
             .bind(&query.category).bind(query.sold).bind(&selected_sizes).fetch_all(&mut *tx).await.map_err(internal)?;
-        let sizes = sqlx::query_scalar::<_, String>("SELECT min(btrim(size)) FROM products CROSS JOIN LATERAL unnest(sizes) AS size WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(size) <> '' AND (cardinality($3::text[])=0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b))=ANY($3))) GROUP BY lower(btrim(size)) ORDER BY lower(btrim(size))")
+        let sizes = sqlx::query_scalar::<_, String>("SELECT min(btrim(size)) FROM products CROSS JOIN LATERAL unnest(sizes) AS size WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(size) <> '' AND (cardinality($3::text[])=0 OR catalog_terms(brands) && $3) GROUP BY lower(btrim(size)) ORDER BY lower(btrim(size))")
             .bind(&query.category).bind(query.sold).bind(&selected).fetch_all(&mut *tx).await.map_err(internal)?;
         tx.commit().await.map_err(internal)?;
         Ok(ProductPage {items, total, brands, sizes})
@@ -242,7 +250,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    let db = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
+    let db = sqlx::postgres::PgPoolOptions::new().max_connections(10).acquire_timeout(std::time::Duration::from_secs(3)).connect(&std::env::var("DATABASE_URL")?).await?;
     sqlx::migrate!().run(&db).await?;
     media_store::initialize().await?;
     if let Some(mode) = std::env::args().nth(1) {
@@ -273,6 +281,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         chat_events: tokio::sync::broadcast::channel(1024).0,
         db,
         cache: redis::Client::open(std::env::var("REDIS_URL")?)?,
+        cache_connection: Default::default(),
+        auth_work: std::sync::Arc::new(tokio::sync::Semaphore::new(2)),
+        image_work: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         registry,
         requests,
         admin_origin: std::env::var("APP_ORIGIN")

@@ -17,7 +17,7 @@ where
     let key = format!("catalog:v1:{revision}:{resource}");
     let timer = state.monitoring.cache_read_seconds.with_label_values::<&str>(&[]).start_timer();
     let cached = tokio::time::timeout(Duration::from_millis(150), async {
-        let mut connection = state.cache.get_multiplexed_async_connection().await?;
+        let mut connection = state.redis_connection().await?;
         connection.get::<_, Option<String>>(&key).await
     })
     .await;
@@ -40,7 +40,7 @@ where
         // never enter Redis. Old revisions expire and are also subject to LRU.
         if json.len() <= 2 * 1024 * 1024 {
             let result = tokio::time::timeout(Duration::from_millis(150), async {
-                let mut connection = state.cache.get_multiplexed_async_connection().await?;
+                let mut connection = state.redis_connection().await?;
                 connection.set_ex::<_, _, ()>(&key, json, 3600).await
             })
             .await;

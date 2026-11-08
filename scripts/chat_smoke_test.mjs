@@ -88,11 +88,12 @@ try{
  execFileSync('docker',['compose','exec','-T','postgres','sh','-c','psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1'],{input:`INSERT INTO chat_messages (chat_id,is_admin,client_id,body) SELECT ${chat.id}, false, 'fixture-' || i, 'History ' || i FROM generate_series(1,105) i;`,stdio:['pipe','ignore','inherit']});
  const latest=await request(buyer,`/api/auth/chats/${chat.id}/messages`);assert.equal(latest.messages.length,100);assert.equal(latest.has_more,true);
  const older=await request(buyer,`/api/auth/chats/${chat.id}/messages?before=${latest.messages[0].id}`);assert.equal(older.messages.length,7);assert.equal(older.has_more,false);
- await request(admin,`/api/admin/products/${productId}`,'DELETE',undefined,204);productId=null;
- const afterDelete=(await request(buyer,'/api/auth/chats')).find(c=>c.id===chat.id);assert.equal(afterDelete.product_exists,false);assert.equal(afterDelete.product_name,'Temporary chat test');
- assert.equal((await request(buyer,`/api/auth/chats/${chat.id}/messages`)).messages.length,100);
  await request(buyer,'/api/auth/logout','POST',{},204);
  reopened.send({type:'typing',active:true});await reopened.wait(e=>e.type==='unauthorized');
+ // Product deletion now intentionally cascades chats/messages (0013).
+ await request(admin,`/api/admin/products/${productId}`,'DELETE',undefined,204);productId=null;
+ assert.equal((await request(admin,'/api/admin/chats')).some(c=>c.id===chat.id),false);
+ await request(admin,`/api/admin/chats/${chat.id}/messages`,'GET',undefined,404);
  console.log('PASS: persistent unread counts, read authorization and monotonic bounded cursors, admin and customer notifications, replay and isolation, WebSocket delivery both ways, typing, ownership, origin, history, pagination, deduplication, product deletion and logout revocation');
 }finally{
  for(const item of sockets)item.ws.close();

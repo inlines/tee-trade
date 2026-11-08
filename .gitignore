@@ -7,3 +7,5 @@ target/
 compose.override.yaml
 
 backups/
+__pycache__/
+*.pyc

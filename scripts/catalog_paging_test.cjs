@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const req=require('node:module').createRequire(require('node:path').resolve('front/package.json'));
 const ts=req('typescript');
-const source=fs.readFileSync('front/src/app/pages.ts','utf8').split('export class CatalogPage {')[1].split('\n@Component')[0];
+const source=fs.readFileSync('front/src/app/catalog-page.ts','utf8').split('export class CatalogPage {')[1].split('\n@Component')[0];
 const signal=v=>{const f=()=>v;f.set=n=>v=n;f.update=fn=>v=fn(v);return f;};
 let reset,destroy,mobile=false,events;
 class NavigationStart {}

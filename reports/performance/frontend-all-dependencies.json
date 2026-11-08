@@ -1,0 +1,386 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@angular/cli": {
+      "name": "@angular/cli",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "pacote"
+      ],
+      "effects": [],
+      "range": "17.0.0-next.0 - 22.1.0-rc.0",
+      "nodes": [
+        "node_modules/@angular/cli"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "@npmcli/package-json": {
+      "name": "@npmcli/package-json",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "glob"
+      ],
+      "effects": [
+        "@npmcli/run-script",
+        "pacote"
+      ],
+      "range": ">=3.1.0",
+      "nodes": [
+        "node_modules/@npmcli/package-json"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "@npmcli/run-script": {
+      "name": "@npmcli/run-script",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@npmcli/package-json"
+      ],
+      "effects": [
+        "pacote"
+      ],
+      "range": ">=7.0.4",
+      "nodes": [
+        "node_modules/@npmcli/run-script"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "@sigstore/sign": {
+      "name": "@sigstore/sign",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "make-fetch-happen"
+      ],
+      "effects": [
+        "sigstore"
+      ],
+      "range": ">=2.0.0",
+      "nodes": [
+        "node_modules/@sigstore/sign"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "@sigstore/tuf": {
+      "name": "@sigstore/tuf",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "tuf-js"
+      ],
+      "effects": [
+        "sigstore"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@sigstore/tuf"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "@tufjs/models": {
+      "name": "@tufjs/models",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "minimatch"
+      ],
+      "effects": [
+        "tuf-js"
+      ],
+      "range": ">=1.0.1",
+      "nodes": [
+        "node_modules/@tufjs/models"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "cacache": {
+      "name": "cacache",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "glob"
+      ],
+      "effects": [
+        "make-fetch-happen",
+        "pacote"
+      ],
+      "range": ">=17.0.5",
+      "nodes": [
+        "node_modules/cacache"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "glob": {
+      "name": "glob",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1244013,
+          "name": "glob",
+          "dependency": "glob",
+          "title": "Glob: AbortSignal cancellation bypass allows post-timeout filesystem traversal",
+          "url": "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=9.0.0 <=14.0.1"
+        },
+        "minimatch"
+      ],
+      "effects": [
+        "@npmcli/package-json",
+        "cacache"
+      ],
+      "range": "9.0.0 - 14.0.1",
+      "nodes": [
+        "node_modules/glob"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "ignore-walk": {
+      "name": "ignore-walk",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "minimatch"
+      ],
+      "effects": [
+        "npm-packlist"
+      ],
+      "range": ">=6.0.2",
+      "nodes": [
+        "node_modules/ignore-walk"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "make-fetch-happen": {
+      "name": "make-fetch-happen",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "cacache"
+      ],
+      "effects": [
+        "@sigstore/sign",
+        "npm-registry-fetch",
+        "tuf-js"
+      ],
+      "range": ">=13.0.0",
+      "nodes": [
+        "node_modules/make-fetch-happen"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "minimatch": {
+      "name": "minimatch",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1244623,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch has potential denial of service via globparts amplification",
+          "url": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-405"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=7.0.0 <11.0.1"
+        }
+      ],
+      "effects": [
+        "@tufjs/models",
+        "glob",
+        "ignore-walk"
+      ],
+      "range": "7.0.0 - 11.0.0",
+      "nodes": [
+        "node_modules/minimatch"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "npm-packlist": {
+      "name": "npm-packlist",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "ignore-walk"
+      ],
+      "effects": [
+        "pacote"
+      ],
+      "range": ">=8.0.1",
+      "nodes": [
+        "node_modules/npm-packlist"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "npm-registry-fetch": {
+      "name": "npm-registry-fetch",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "make-fetch-happen"
+      ],
+      "effects": [
+        "pacote"
+      ],
+      "range": ">=16.0.0",
+      "nodes": [
+        "node_modules/npm-registry-fetch"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "pacote": {
+      "name": "pacote",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@npmcli/package-json",
+        "@npmcli/run-script",
+        "cacache",
+        "npm-packlist",
+        "npm-registry-fetch",
+        "sigstore"
+      ],
+      "effects": [
+        "@angular/cli"
+      ],
+      "range": ">=17.0.0",
+      "nodes": [
+        "node_modules/pacote"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "sigstore": {
+      "name": "sigstore",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@sigstore/sign",
+        "@sigstore/tuf"
+      ],
+      "effects": [
+        "pacote"
+      ],
+      "range": ">=1.6.0",
+      "nodes": [
+        "node_modules/sigstore"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "tuf-js": {
+      "name": "tuf-js",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@tufjs/models",
+        "make-fetch-happen"
+      ],
+      "effects": [
+        "@sigstore/tuf"
+      ],
+      "range": ">=1.1.2",
+      "nodes": [
+        "node_modules/tuf-js"
+      ],
+      "fixAvailable": {
+        "name": "@angular/cli",
+        "version": "22.2.6",
+        "isSemVerMajor": true
+      }
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 16,
+      "high": 0,
+      "critical": 0,
+      "total": 16
+    },
+    "dependencies": {
+      "prod": 10,
+      "dev": 504,
+      "optional": 128,
+      "peer": 3,
+      "peerOptional": 0,
+      "total": 513
+    }
+  }
+}

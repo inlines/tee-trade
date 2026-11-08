@@ -1,9 +1,10 @@
 import { ProgressiveImage } from './progressive-image';
-import { Component, DestroyRef, afterNextRender, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, afterNextRender, computed, effect, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Product, previewUrl } from './catalog';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-product-carousel', imports: [RouterLink, ProgressiveImage],
   template: `<section class="product-carousel" aria-roledescription="карусель" aria-label="Галерея товаров"
       (keydown.arrowleft)="onArrow($event, -1)" (keydown.arrowright)="onArrow($event, 1)">

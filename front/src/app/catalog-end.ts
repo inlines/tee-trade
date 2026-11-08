@@ -1,6 +1,7 @@
-import { AfterViewInit, Component, DestroyRef, ElementRef, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, AfterViewInit, Component, DestroyRef, ElementRef, inject, output } from '@angular/core';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-catalog-end',
   template: '<button class="button" (click)="reached.emit()">Показать ещё</button>',
   styles: ':host { display:flex; justify-content:center; padding:24px 0; }',

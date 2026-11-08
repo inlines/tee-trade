@@ -1,9 +1,10 @@
-import { Component, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AdminService } from './admin.service';
 import { Product, previewUrl } from './catalog';
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-product-card', imports: [RouterLink, CurrencyPipe],
   template: `<a class="product-card" [routerLink]="['/product', product().id]" [queryParams]="catalogQuery()">
     <div class="product-cover"><img [src]="previewUrl()" [alt]="cover().alt" [loading]="priority() ? 'eager' : 'lazy'" [attr.fetchpriority]="priority() ? 'high' : 'auto'" decoding="async" width="640" height="720">
@@ -11,7 +12,7 @@ import { Product, previewUrl } from './catalog';
       @if (!product().sold && product().is_demo) { <span class="demo-badge">Демо</span> }
     </div>
     <div class="product-meta"><span>{{ product().brands.join(' × ') }}</span><span>{{ product().sizes.join(" · ") }}</span></div>
-    <h3>{{ product().name || 'Без названия' }}</h3>
+    @if(headingLevel() === 2) { <h2>{{ product().name || 'Без названия' }}</h2> } @else { <h3>{{ product().name || 'Без названия' }}</h3> }
     <p class="price">{{ product().price_cents === null ? 'Цена не указана' : (product().price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
   </a>
   @if (admin.session()) {
@@ -20,6 +21,7 @@ import { Product, previewUrl } from './catalog';
 })
 export class ProductCard {
   readonly admin = inject(AdminService);
+  readonly headingLevel = input<2 | 3>(3);
   readonly priority = input(false);
   readonly catalogQuery = input<Record<string, string> | null>(null);
   readonly product = input.required<Product>();

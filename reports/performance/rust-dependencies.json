@@ -1,0 +1,15 @@
+{
+  "packages_scanned": 267,
+  "findings": [
+    {
+      "package": "rsa",
+      "version": "0.9.10",
+      "vulnerabilities": [
+        {
+          "id": "RUSTSEC-2023-0071",
+          "modified": "2026-09-14T09:45:02.996132Z"
+        }
+      ]
+    }
+  ]
+}

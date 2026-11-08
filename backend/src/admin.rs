@@ -166,7 +166,9 @@ async fn login(
             .await
             .map_err(internal)?;
     let matches_username = username == credentials.username;
+    let permit = state.auth_work.clone().try_acquire_owned().map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "Сервер занят. Попробуйте ещё раз"))?;
     let valid = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         PasswordHash::new(&hash).is_ok_and(|hash| {
             Argon2::default()
                 .verify_password(credentials.password.as_bytes(), &hash)
@@ -553,6 +555,7 @@ async fn upload(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let permit = state.image_work.clone().try_acquire_owned().map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "Обрабатывается другое фото. Повторите загрузку"))?;
     let field = multipart
         .next_field()
         .await
@@ -581,6 +584,7 @@ async fn upload(
     }
     let (jpeg, preview) =
         tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, Vec<u8>), ApiError> {
+            let _permit = permit;
             let format =
                 image::guess_format(&bytes).map_err(|_| bad("Поддерживаются JPEG, PNG и WebP"))?;
             if !matches!(
@@ -730,16 +734,21 @@ pub struct Storefront {
     settings: StorefrontSettings,
     carousel: Vec<Product>,
     featured: Vec<Product>,
+    arrivals: Vec<Product>,
 }
 pub async fn storefront(State(state): State<AppState>) -> Result<Json<Storefront>, ApiError> {
-    crate::catalog_cache::get(&state, "storefront", async {
+    crate::catalog_cache::get(&state, "storefront:v2", async {
         let Json(settings) = self::settings(State(state.clone())).await?;
         let carousel = selected_products(&state.db, &settings.carousel_product_ids).await?;
         let featured = selected_products(&state.db, &settings.featured_product_ids).await?;
+        let arrivals = sqlx::query_as::<_, Product>(&format!(
+            "SELECT {PRODUCT_COLUMNS} FROM products WHERE NOT sold ORDER BY id DESC LIMIT 4"
+        )).fetch_all(&state.db).await.map_err(internal)?;
         Ok(Storefront {
             settings,
             carousel,
             featured,
+            arrivals,
         })
     })
     .await

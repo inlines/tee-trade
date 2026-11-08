@@ -316,7 +316,7 @@ main:focus {
   gap:8px;
 }
 
-.product-card h3 {
+.product-card :is(h2,h3) {
   font-size:17px;
   letter-spacing:-.02em;
 }
@@ -706,7 +706,7 @@ footer>span {
   .product-meta {
     font-size:8px;
   }
-  .product-card h3 {
+  .product-card :is(h2,h3) {
     font-size:15px;
   }
 }
@@ -1014,7 +1014,7 @@ app-product-carousel {
 html,body { width:100%; max-width:100%; }
 app-root,main,.home-content,.gallery,.product-info,.header-main nav,app-product-card { min-width:0; }
 .gallery,.product-info { max-width:100%; }
-.product-info h1,.product-card h3,.breadcrumbs,dd,.header-main nav>a { overflow-wrap:anywhere; }
+.product-info h1,.product-card :is(h2,h3),.breadcrumbs,dd,.header-main nav>a { overflow-wrap:anywhere; }
 .header-main nav { max-width:100%; }
 .thumbnails { max-width:100%; }
 .thumbnails button { padding:0; }
@@ -1043,3 +1043,11 @@ app-root,main,.home-content,.gallery,.product-info,.header-main nav,app-product-
 .product-navigation .button { min-width:56px; }
 .product-navigation button:disabled { opacity:.4; cursor:default; }
 .product-swipe-enabled { touch-action:pan-y pinch-zoom; }
+
+/* Reserve the detail layout while JSON loads, keeping the footer out of the viewport. */
+.product-loading { min-height:calc(100svh - 90px); }
+.product-image-placeholder { aspect-ratio:8/9; width:100%; background:#e9e6df; }
+@media(max-width:700px) { .product-image-placeholder { max-height:560px; } .product-loading .product-info { min-height:320px; } }
+.home-loading { min-height:100svh; }
+
+main.route-loading,.catalog-loading { min-height:100svh; }

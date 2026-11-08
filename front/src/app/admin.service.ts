@@ -14,7 +14,7 @@ export interface StorefrontSettings {
   manifesto_eyebrow: string; manifesto_title: string; manifesto_link_text: string;
   carousel_enabled: boolean; categories_enabled: boolean; popular_enabled: boolean; manifesto_enabled: boolean;
 }
-export interface Storefront { settings: StorefrontSettings; carousel: Product[]; featured: Product[]; }
+export interface Storefront { settings: StorefrontSettings; carousel: Product[]; featured: Product[]; arrivals: Product[]; }
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   private readonly http = inject(HttpClient);

@@ -1,0 +1,307 @@
+{
+  "date": "2026-11-08",
+  "lighthouse": {
+    "home": {
+      "before": {
+        "scores": {
+          "performance": 96,
+          "accessibility": 100,
+          "best-practices": 93,
+          "seo": 100
+        },
+        "lcp_ms": 2298.084,
+        "tbt_ms": 31,
+        "cls": 0.08827218751891622
+      },
+      "after": {
+        "scores": {
+          "performance": 98,
+          "accessibility": 100,
+          "best-practices": 93,
+          "seo": 100
+        },
+        "lcp_ms": 2222.1019,
+        "tbt_ms": 27,
+        "cls": 0
+      }
+    },
+    "catalog": {
+      "before": {
+        "scores": {
+          "performance": 97,
+          "accessibility": 98,
+          "best-practices": 93,
+          "seo": 100
+        },
+        "lcp_ms": 2405.60175,
+        "tbt_ms": 27,
+        "cls": 0.000645365841415324
+      },
+      "after": {
+        "scores": {
+          "performance": 97,
+          "accessibility": 100,
+          "best-practices": 93,
+          "seo": 100
+        },
+        "lcp_ms": 2412.35535,
+        "tbt_ms": 29,
+        "cls": 0
+      }
+    },
+    "product": {
+      "before": {
+        "scores": {
+          "performance": 93,
+          "accessibility": 100,
+          "best-practices": 96,
+          "seo": 100
+        },
+        "lcp_ms": 2370.32775,
+        "tbt_ms": 25,
+        "cls": 0.1267430598719382
+      },
+      "after": {
+        "scores": {
+          "performance": 96,
+          "accessibility": 100,
+          "best-practices": 96,
+          "seo": 100
+        },
+        "lcp_ms": 2672.5894000000008,
+        "tbt_ms": 25,
+        "cls": 0
+      }
+    }
+  },
+  "environment": {
+    "host": "Mac16,11, 12 physical CPU, 24 GiB RAM",
+    "docker": "12 CPU, 7.65 GiB RAM shared with other containers",
+    "vps_known": "1 vCPU, 1.9 GiB RAM; not tested remotely"
+  },
+  "limitations": [
+    "Single Lighthouse run per revision/page; scores vary.",
+    "Warm JSON API test excludes image transfer, TLS, WAN, writes and login hashing.",
+    "1000-fixture run limits only backend CPU, not PostgreSQL/Redis/whole host.",
+    "Idle WebSocket test uses one disposable account, not 200 distinct users."
+  ],
+  "warm_before": {
+    "base": "http://localhost:4200",
+    "date": "2026-11-08T13:09:46.330Z",
+    "scenario": "Warm public JSON API, closed loop, no writes or images",
+    "products": 2,
+    "paths": [
+      "/api/products/page?limit=8",
+      "/api/products/page?limit=4&category=t-shirts",
+      "/api/storefront",
+      "/api/products/10",
+      "/api/products/17"
+    ],
+    "results": [
+      {
+        "users": 10,
+        "think_ms": 0,
+        "seconds": 10.009233959000001,
+        "requests": 23466,
+        "rps": 2344.4351581871138,
+        "p50_ms": 2.8034590000006574,
+        "p95_ms": 9.941917000000103,
+        "p99_ms": 11.859124999999949,
+        "statuses": {
+          "200": 23466
+        }
+      },
+      {
+        "users": 50,
+        "think_ms": 0,
+        "seconds": 10.024432083,
+        "requests": 15154,
+        "rps": 1511.7065859221104,
+        "p50_ms": 28.404874999998356,
+        "p95_ms": 70.44225000000006,
+        "p99_ms": 107.17258299999958,
+        "statuses": {
+          "200": 4747,
+          "502": 10407
+        }
+      },
+      {
+        "users": 100,
+        "think_ms": 0,
+        "seconds": 10.078834791999999,
+        "requests": 12625,
+        "rps": 1252.6249572044778,
+        "p50_ms": 72.45570799999768,
+        "p95_ms": 140.64474999999948,
+        "p99_ms": 190.70229200000176,
+        "statuses": {
+          "200": 4,
+          "502": 12621
+        }
+      },
+      {
+        "users": 200,
+        "think_ms": 0,
+        "seconds": 10.121823208000002,
+        "requests": 11540,
+        "rps": 1140.1108044328528,
+        "p50_ms": 161.04562499999884,
+        "p95_ms": 295.78008299999783,
+        "p99_ms": 442.96304199999577,
+        "statuses": {
+          "200": 3,
+          "502": 11537
+        }
+      }
+    ]
+  },
+  "warm_after": {
+    "base": "http://localhost:4200",
+    "date": "2026-11-08T13:19:41.565Z",
+    "scenario": "Warm public JSON API, closed loop, no writes or images",
+    "products": 2,
+    "paths": [
+      "/api/products/page?limit=8",
+      "/api/products/page?limit=4&category=t-shirts",
+      "/api/storefront",
+      "/api/products/10",
+      "/api/products/17"
+    ],
+    "results": [
+      {
+        "users": 10,
+        "think_ms": 0,
+        "seconds": 10.022099625000001,
+        "requests": 75918,
+        "rps": 7575.059402784573,
+        "p50_ms": 1.196666999999934,
+        "p95_ms": 2.3105419999999413,
+        "p99_ms": 3.203292000000147,
+        "statuses": {
+          "200": 75918
+        }
+      },
+      {
+        "users": 50,
+        "think_ms": 0,
+        "seconds": 10.035699332999998,
+        "requests": 130357,
+        "rps": 12989.328961993926,
+        "p50_ms": 3.5177910000002157,
+        "p95_ms": 6.755708999999115,
+        "p99_ms": 8.778499999996711,
+        "statuses": {
+          "200": 130357
+        }
+      },
+      {
+        "users": 100,
+        "think_ms": 0,
+        "seconds": 10.037480041999999,
+        "requests": 124211,
+        "rps": 12374.719499342644,
+        "p50_ms": 7.476915999999619,
+        "p95_ms": 13.320792000002257,
+        "p99_ms": 17.245750000001863,
+        "statuses": {
+          "200": 124211
+        }
+      },
+      {
+        "users": 200,
+        "think_ms": 0,
+        "seconds": 10.037475707999999,
+        "requests": 123133,
+        "rps": 12267.327322332785,
+        "p50_ms": 15.254249999998137,
+        "p95_ms": 26.294749999993655,
+        "p99_ms": 36.20154199999888,
+        "statuses": {
+          "200": 123133
+        }
+      }
+    ]
+  },
+  "paced_1000_products": {
+    "base": "http://localhost:4200",
+    "date": "2026-11-08T13:22:16.802Z",
+    "scenario": "Warm public JSON API, closed loop, no writes or images",
+    "products": 902,
+    "paths": [
+      "/api/products/page?limit=8",
+      "/api/products/page?limit=4&category=t-shirts",
+      "/api/storefront",
+      "/api/products/10",
+      "/api/products/17",
+      "/api/products/214",
+      "/api/products/215"
+    ],
+    "results": [
+      {
+        "users": 10,
+        "think_ms": 1000,
+        "seconds": 15.148060166,
+        "requests": 150,
+        "rps": 9.902258002425734,
+        "p50_ms": 7.54620900000009,
+        "p95_ms": 13.479041999999936,
+        "p99_ms": 14.767166999999972,
+        "statuses": {
+          "200": 150
+        }
+      },
+      {
+        "users": 50,
+        "think_ms": 1000,
+        "seconds": 15.112465959,
+        "requests": 750,
+        "rps": 49.627903350435595,
+        "p50_ms": 5.425500000001193,
+        "p95_ms": 16.351250000001528,
+        "p99_ms": 21.5614170000008,
+        "statuses": {
+          "200": 750
+        }
+      },
+      {
+        "users": 100,
+        "think_ms": 1000,
+        "seconds": 15.171571207999998,
+        "requests": 1500,
+        "rps": 98.86912696353079,
+        "p50_ms": 7.238916000002064,
+        "p95_ms": 20.636874999996508,
+        "p99_ms": 28.382541999999376,
+        "statuses": {
+          "200": 1500
+        }
+      },
+      {
+        "users": 200,
+        "think_ms": 1000,
+        "seconds": 15.211507832999995,
+        "requests": 3000,
+        "rps": 197.2191075950913,
+        "p50_ms": 9.61437499999738,
+        "p95_ms": 27.37316699999792,
+        "p99_ms": 37.58170899999823,
+        "statuses": {
+          "200": 3000
+        }
+      }
+    ]
+  },
+  "websocket": {
+    "connections": 200,
+    "open_after_20s": 200,
+    "errors": 0,
+    "received_frames": 400,
+    "p95_handshake_ms": 38.72399999999999,
+    "scope": "One disposable customer, idle notification streams; not message throughput or 200 distinct accounts"
+  },
+  "redis_recovery": {
+    "fallback_seconds": 0.157228333002422,
+    "recovery_seconds": 4.742740415997105,
+    "result": "PASS"
+  }
+}

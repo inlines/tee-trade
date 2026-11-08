@@ -177,7 +177,7 @@ impl Metrics {
                 let start = Instant::now();
                 let ok = matches!(
                     tokio::time::timeout(Duration::from_secs(2), async {
-                        let mut c = state.cache.get_multiplexed_async_connection().await?;
+                        let mut c = state.redis_connection().await?;
                         redis::cmd("PING").query_async::<String>(&mut c).await
                     })
                     .await,
@@ -190,7 +190,7 @@ impl Metrics {
                     .with_label_values(&["redis"])
                     .set(start.elapsed().as_secs_f64());
                 let info = tokio::time::timeout(Duration::from_secs(2), async {
-                    let mut c = state.cache.get_multiplexed_async_connection().await?;
+                    let mut c = state.redis_connection().await?;
                     redis::cmd("INFO").query_async::<String>(&mut c).await
                 }).await;
                 if let Ok(Ok(info)) = info {
