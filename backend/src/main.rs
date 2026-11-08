@@ -45,14 +45,14 @@ struct Product {
     price_cents: Option<i32>,
     category: String,
     brands: Vec<String>,
-    size: String,
+    sizes: Vec<String>,
     description: String,
     theme: String,
     images: sqlx::types::Json<Vec<ProductImage>>,
     is_demo: bool,
     sold: bool,
 }
-const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brands, size, description, theme, images, is_demo, sold";
+const PRODUCT_COLUMNS: &str = "id, name, price_cents, category, brands, sizes, description, theme, images, is_demo, sold";
 const CATEGORIES: [&str; 7] = ["sneakers", "t-shirts", "accessories", "headwear", "hoodies", "sweatshirts", "longsleeves"];
 #[derive(Deserialize)]
 struct CatalogQuery {
@@ -96,12 +96,25 @@ struct PageQuery {
     #[serde(default)]
     sort: String,
     brands: Option<String>,
+    sizes: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 struct ProductPage {
     items: Vec<Product>,
     total: i64,
     brands: Vec<String>,
+    sizes: Vec<String>,
+}
+fn parse_filter(raw: Option<&str>) -> Result<Vec<String>, ApiError> {
+    let mut values: Vec<String> = raw.map(serde_json::from_str).transpose()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid filter"))?.unwrap_or_default();
+    if values.len() > 50 || values.iter().any(|v| v.trim().is_empty() || v.chars().count() > 100) {
+        return Err((StatusCode::BAD_REQUEST, "Invalid filter"));
+    }
+    values = values.into_iter().map(|v| v.trim().to_lowercase()).collect();
+    values.sort();
+    values.dedup();
+    Ok(values)
 }
 async fn product_page(
     State(state): State<AppState>,
@@ -117,25 +130,8 @@ async fn product_page(
     {
         return Err((StatusCode::BAD_REQUEST, "Unknown category"));
     }
-    let mut selected: Vec<String> = match query.brands.as_deref() {
-        Some(raw) => {
-            serde_json::from_str(raw).map_err(|_| (StatusCode::BAD_REQUEST, "Invalid brands"))?
-        }
-        None => Vec::new(),
-    };
-    if selected.len() > 50
-        || selected
-            .iter()
-            .any(|b| b.trim().is_empty() || b.chars().count() > 100)
-    {
-        return Err((StatusCode::BAD_REQUEST, "Invalid brands"));
-    }
-    selected = selected
-        .into_iter()
-        .map(|b| b.trim().to_lowercase())
-        .collect();
-    selected.sort();
-    selected.dedup();
+    let selected = parse_filter(query.brands.as_deref())?;
+    let selected_sizes = parse_filter(query.sizes.as_deref())?;
     let order = match query.sort.as_str() {
         "" | "default" => "id ASC",
         "price-asc" => "price_cents ASC NULLS LAST, id ASC",
@@ -143,26 +139,29 @@ async fn product_page(
         _ => return Err((StatusCode::BAD_REQUEST, "Unknown sort")),
     };
     let key = format!(
-        "page-brands:{}:{}:{}:{}:{}:{}",
+        "page-sizes:{}:{}:{}:{}:{}:{}:{}",
         query.sold,
         query.category.as_deref().unwrap_or("all"),
         query.limit,
         query.offset,
         order,
-        serde_json::to_string(&selected).map_err(internal)?
+        serde_json::to_string(&selected).map_err(internal)?,
+        serde_json::to_string(&selected_sizes).map_err(internal)?
     );
     catalog_cache::get(&state, &key, async {
         let mut tx = state.db.begin().await.map_err(internal)?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY").execute(&mut *tx).await.map_err(internal)?;
-        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($3)))")
-            .bind(&query.category).bind(query.sold).bind(&selected).fetch_one(&mut *tx).await.map_err(internal)?;
-        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($5))) ORDER BY {order} LIMIT $3 OFFSET $4"))
-            .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).bind(&selected).fetch_all(&mut *tx).await.map_err(internal)?;
+        let total = sqlx::query_scalar("SELECT count(*) FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($3::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($3))) AND (cardinality($4::text[])=0 OR EXISTS (SELECT 1 FROM unnest(sizes) s WHERE lower(btrim(s))=ANY($4)))")
+            .bind(&query.category).bind(query.sold).bind(&selected).bind(&selected_sizes).fetch_one(&mut *tx).await.map_err(internal)?;
+        let items = sqlx::query_as::<_, Product>(&format!("SELECT {PRODUCT_COLUMNS} FROM products WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND (cardinality($5::text[]) = 0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b)) = ANY($5))) AND (cardinality($6::text[])=0 OR EXISTS (SELECT 1 FROM unnest(sizes) s WHERE lower(btrim(s))=ANY($6))) ORDER BY {order} LIMIT $3 OFFSET $4"))
+            .bind(&query.category).bind(query.sold).bind(query.limit).bind(query.offset).bind(&selected).bind(&selected_sizes).fetch_all(&mut *tx).await.map_err(internal)?;
         // Facet excludes its own selection and pagination, but respects every other filter.
-        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
-            .bind(&query.category).bind(query.sold).fetch_all(&mut *tx).await.map_err(internal)?;
+        let brands = sqlx::query_scalar::<_, String>("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(brand) <> '' AND (cardinality($3::text[])=0 OR EXISTS (SELECT 1 FROM unnest(sizes) s WHERE lower(btrim(s))=ANY($3))) GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))")
+            .bind(&query.category).bind(query.sold).bind(&selected_sizes).fetch_all(&mut *tx).await.map_err(internal)?;
+        let sizes = sqlx::query_scalar::<_, String>("SELECT min(btrim(size)) FROM products CROSS JOIN LATERAL unnest(sizes) AS size WHERE ($1::text IS NULL OR category=$1) AND sold=$2 AND btrim(size) <> '' AND (cardinality($3::text[])=0 OR EXISTS (SELECT 1 FROM unnest(brands) b WHERE lower(btrim(b))=ANY($3))) GROUP BY lower(btrim(size)) ORDER BY lower(btrim(size))")
+            .bind(&query.category).bind(query.sold).bind(&selected).fetch_all(&mut *tx).await.map_err(internal)?;
         tx.commit().await.map_err(internal)?;
-        Ok(ProductPage {items, total, brands})
+        Ok(ProductPage {items, total, brands, sizes})
     }).await.map(Json)
 }
 

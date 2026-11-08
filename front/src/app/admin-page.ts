@@ -1,4 +1,5 @@
 import { CatalogEnd } from './catalog-end';
+import { SizePicker } from './size-picker';
 import { BrandPicker } from './brand-picker';
 import { RequestList } from './request-list';
 import { effect, untracked, DestroyRef } from '@angular/core';
@@ -13,7 +14,7 @@ import { ChatService } from './chat.service';
 import { Product, ProductImage, categories, previewUrl } from './catalog';
 
 @Component({
-  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList, BrandPicker, CatalogEnd],
+  selector: 'app-admin', imports: [FormsModule, RouterLink, CurrencyPipe, RequestList, BrandPicker, SizePicker, CatalogEnd],
   templateUrl: './admin-page.html', styleUrl: './admin-page.css',
 })
 export class AdminPage {
@@ -34,7 +35,8 @@ export class AdminPage {
   readonly tab = signal<'products' | 'archive' | 'storefront' | 'requests'>('products');
   readonly products = signal<Product[]>([]);
   readonly incomplete = signal(false);
-  missing(product:Product){return [!product.name.trim()?'название':'',!product.category?'категория':'',!product.brands.length?'бренды':'',!product.size.trim()?'размер':'',!product.description.trim()?'описание':'',!product.theme.trim()?'тематика':'',product.price_cents===null?'цена':'',!product.images.length?'фотографии':''].filter(Boolean).join(', ');}
+  missing(product:Product){return [!product.name.trim()?'название':'',!product.category?'категория':'',!product.brands.length?'бренды':'',!product.sizes.length?'размеры':'',!product.description.trim()?'описание':'',!product.theme.trim()?'тематика':'',product.price_cents===null?'цена':'',!product.images.length?'фотографии':''].filter(Boolean).join(', ');}
+  readonly sizes = signal<string[]>([]);
   readonly brands = signal<string[]>([]);
   readonly search = signal('');
   readonly filtered = this.products;
@@ -74,15 +76,15 @@ export class AdminPage {
     this.tab.set(tab);
     void this.router.navigate([], {relativeTo:this.route,queryParams:{request:null},queryParamsHandling:'merge',replaceUrl:true});
   }
-  private emptyDraft(): ProductDraft { return { name:'', category:'', brands:[], size:'', description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
+  private emptyDraft(): ProductDraft { return { name:'', category:'', brands:[], sizes:[], description:'', theme:'', price_cents:null, images:[], is_demo:false, sold:false }; }
   private async initialize() {
     try { await this.api.restore(); if (this.api.session()) await this.load(); }
     catch (error) { this.handleError(error); }
     finally { this.checking.set(false); }
   }
   private async load() {
-    const [brands, settings] = await Promise.all([this.api.brands(), this.api.settings()]);
-    this.brands.set(brands); this.settings.set(settings);
+    const [brands, sizes, settings] = await Promise.all([this.api.brands(), this.api.sizes(), this.api.settings()]);
+    this.brands.set(brands); this.sizes.set(sizes); this.settings.set(settings);
     const labels=await this.api.labels([...new Set([...settings.carousel_product_ids,...settings.featured_product_ids])]);
     this.names.update(names=>{const next=new Map(names);labels.forEach(p=>next.set(p.id,p.name));return next;});
     const chatId = this.route.snapshot.queryParamMap.get('chat');
@@ -193,7 +195,7 @@ export class AdminPage {
       this.products.update(products => [product, ...products.filter(p => p.id !== product.id)]);
       this.editId.set(product.id); this.draft = { ...product }; this.dirtyProduct.set(false);
       if (product.sold) { this.editor.set(false); this.tab.set('archive'); }
-      this.names.update(names=>new Map(names).set(product.id,product.name)); this.brands.set(await this.api.brands()); await this.resetProducts();
+      this.names.update(names=>new Map(names).set(product.id,product.name)); this.brands.set(await this.api.brands()); this.sizes.set(await this.api.sizes()); await this.resetProducts();
       this.notice.set(product.sold?'Товар сохранён в архиве.':'Товар сохранён и доступен в каталоге.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }
@@ -227,7 +229,7 @@ export class AdminPage {
       if (this.editId() === product.id) {
         this.editor.set(false); this.editId.set(null); this.images.set([]); this.dirtyProduct.set(false);
       }
-      this.names.update(names=>{const next=new Map(names);next.delete(product.id);return next;}); this.brands.set(await this.api.brands()); await this.resetProducts();
+      this.names.update(names=>{const next=new Map(names);next.delete(product.id);return next;}); this.brands.set(await this.api.brands()); this.sizes.set(await this.api.sizes()); await this.resetProducts();
       this.notice.set('Товар и связанные с ним данные удалены.');
     } catch (error) { this.handleError(error); }
     finally { this.busy.set(false); }

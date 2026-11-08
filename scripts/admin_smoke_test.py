@@ -96,7 +96,7 @@ try:
     empty, _ = request('/api/admin/products', 'POST', {}, 201)
     created_products.append(empty['id'])
     assert empty['images'] == [] and empty['name'] == ''
-    assert empty['price_cents'] is None and empty['size'] == ''
+    assert empty['price_cents'] is None and empty['sizes'] == []
     public_empty, _ = request(f"/api/products/{empty['id']}", auth=False)
     assert public_empty == empty
     request(f"/api/admin/products/{empty['id']}", 'PUT', {})
@@ -115,7 +115,7 @@ try:
     print('PASS: sweatshirts and longsleeves creation, editing and separate catalog filters')
     paging_ids = []
     for i in range(10):
-        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brands':[f'{fixture_user} Brand {i%2}'], 'price_cents':(10-i)*100, 'size':str(40+i)}, 201)
+        item, _ = request('/api/admin/products', 'POST', {'name':f'Paging {i}', 'category':'hoodies', 'brands':[f'{fixture_user} Brand {i%2}'], 'price_cents':(10-i)*100, 'sizes':[str(40+i),f'{fixture_user} size {i%2}']}, 201)
         paging_ids.append(item['id']); created_products.append(item['id'])
     for sort, key in [('default',lambda p:(p['id'],)), ('price-asc',lambda p:(p['price_cents'] is None,p['price_cents'] or 0,p['id'])), ('price-desc',lambda p:(p['price_cents'] is None,-(p['price_cents'] or 0),p['id']))]:
         expected = sorted(request('/api/products?category=hoodies',auth=False)[0],key=key)
@@ -139,6 +139,26 @@ try:
     assert request(f'/api/admin/products/{paging_ids[0]}')[0]['id']==paging_ids[0]
     assert len(request('/api/admin/products/labels?'+urlencode({'ids':json.dumps(paging_ids)}))[0])==10
     assert f'{fixture_user} Brand 0' in request('/api/admin/products/brands')[0]
+    size_a=f'{fixture_user} size 0'; size_b=f'{fixture_user} size 1'
+    def sizes_page(values, brands=None, offset=0):
+        params={'category':'hoodies','limit':4,'offset':offset,'sizes':json.dumps(values)}
+        if brands is not None: params['brands']=json.dumps(brands)
+        return request('/api/products/page?'+urlencode(params),auth=False)[0]
+    assert size_a in request('/api/admin/products/sizes')[0]
+    for values, ids in [([size_a],paging_ids[::2]),([size_b],paging_ids[1::2]),([size_a,size_b],paging_ids)]:
+        loaded=[]
+        for offset in range(0,len(ids),4):
+            page=sizes_page(values,offset=offset)
+            assert page['total']==len(ids)
+            loaded.extend(p['id'] for p in page['items'])
+        assert loaded==ids
+    assert sizes_page([size_a])==sizes_page([' '+size_a.upper()+' ',size_a])
+    assert sizes_page([size_a],[f'{fixture_user} Brand 1'])['total']==0
+    assert sizes_page([size_a])['brands']==[f'{fixture_user} Brand 0']
+    assert size_b not in sizes_page([],[f'{fixture_user} Brand 0'])['sizes']
+    request('/api/products/page?'+urlencode({'limit':4,'sizes':'not-json'}),expected=400,auth=False)
+    request('/api/products/page?'+urlencode({'limit':4,'sizes':json.dumps(['x'*101])}),expected=400,auth=False)
+    print('PASS: size multi-selection, normalization, pagination, combined brand facets and cached queries')
     print('PASS: admin 4/8 product pages, server search, detail, labels and brands independent of page')
     facet_base='/api/products/page?category=hoodies&limit=4&'
     all_facets=request(facet_base,auth=False)[0]['brands']
@@ -200,7 +220,7 @@ try:
     request('/api/media/invalid/preview', expected=404, auth=False)
     print('PASS: file-only uploads, static previews, immutable caching, unchanged large image')
 
-    product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brands':['Test', 'Collab'], 'size':' XL ',
+    product = {'name': 'Integration test ' + uuid.uuid4().hex, 'category':'t-shirts', 'brands':['Test', 'Collab'], 'sizes':[' XL ', 'xl', 'EU 42'],
                'description':'Temporary integration fixture', 'theme':'Test', 'price_cents':12345, 'is_demo':False,
                'images':[{'url':main_url, 'alt':'Test front', 'kind':'front'}, {'url':label_url, 'alt':'Test gallery', 'kind':'detail', 'carousel':True}]}
     invalid = copy.deepcopy(product); invalid['images'][0]['carousel'] = True
@@ -217,26 +237,26 @@ try:
     request(f"/api/admin/products/{one_photo['id']}", 'DELETE', expected=204)
     product_id = saved['id']; created_products.append(product_id)
     assert saved['brands'] == ['Test', 'Collab']
-    assert saved['size'] == 'XL' and 'release_year' not in saved
+    assert saved['sizes'] == ['XL', 'EU 42'] and 'release_year' not in saved
     for brand in ['Test', 'Collab']:
         page=request('/api/products/page?'+urlencode({'limit':8,'brands':json.dumps([brand])}),auth=False)[0]
         assert any(p['id']==product_id for p in page['items'])
     incomplete_url='/api/admin/products/page?'+urlencode({'limit':4,'incomplete':'true','search':product['name']})
     assert request(incomplete_url)[0]['total']==0
-    partial={**product,'size':'','brands':[' Test ','test','Collab']}
+    partial={**product,'sizes':[],'brands':[' Test ','test','Collab']}
     normalized=request(f'/api/admin/products/{product_id}','PUT',partial)[0]
     assert normalized['brands']==['Test','Collab']
     assert request(incomplete_url)[0]['total']==1
     assert request(incomplete_url)[0]['items'][0]['id']==product_id
     request('/api/products?category=t-shirts')  # Warm the old cache before editing.
     product['name'] += ' edited'; product['category'] = 'accessories'; product['price_cents'] = 54321
-    product['size'] = '42–44 / oversize'
+    product['sizes'] = ['42–44', 'oversize']
     updated, _ = request(f'/api/admin/products/{product_id}', 'PUT', product)
     public, _ = request(f'/api/products/{product_id}', auth=False)
     assert updated == public and public['name'] == product['name']
-    assert public['size'] == product['size']
+    assert public['sizes'] == product['sizes']
     assert request(incomplete_url)[0]['total']==0
-    request('/api/admin/products', 'POST', {**product, 'size':'x'*101}, 400)
+    request('/api/admin/products', 'POST', {**product, 'sizes':['x'*101]}, 400)
     assert public['images'][1]['carousel'] is True and public['images'][0]['carousel'] is False
     archived_draft = {**product, 'category':'hoodies', 'sold':True}
     pid = public['id']

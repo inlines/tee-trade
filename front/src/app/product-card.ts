@@ -10,7 +10,7 @@ import { Product, previewUrl } from './catalog';
       @if (product().sold) { <span class="demo-badge">Продано</span> }
       @if (!product().sold && product().is_demo) { <span class="demo-badge">Демо</span> }
     </div>
-    <div class="product-meta"><span>{{ product().brands.join(' × ') }}</span><span>{{ product().size }}</span></div>
+    <div class="product-meta"><span>{{ product().brands.join(' × ') }}</span><span>{{ product().sizes.join(" · ") }}</span></div>
     <h3>{{ product().name || 'Без названия' }}</h3>
     <p class="price">{{ product().price_cents === null ? 'Цена не указана' : (product().price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
   </a>

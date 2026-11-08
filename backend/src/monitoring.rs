@@ -15,6 +15,10 @@ pub struct Metrics {
     pub inflight: IntGauge,
     pub websockets: IntGaugeVec,
     pub cache: IntCounterVec,
+    pub cache_writes: IntCounterVec,
+    pub cache_read_seconds: HistogramVec,
+    redis_info: GaugeVec,
+    redis_info_up: Gauge,
     dependency: GaugeVec,
     probe_seconds: GaugeVec,
     pool: GaugeVec,
@@ -62,6 +66,20 @@ impl Metrics {
                 Opts::new("tee_catalog_cache_total", "Catalog cache outcomes"),
                 &["result"]
             )),
+            cache_writes: reg!(IntCounterVec::new(
+                Opts::new("tee_catalog_cache_writes_total", "Catalog cache write outcomes"),
+                &["result"]
+            )),
+            cache_read_seconds: reg!(HistogramVec::new(
+                HistogramOpts::new("tee_catalog_cache_read_seconds", "Cache lookup including Redis connection")
+                    .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.25]),
+                &[]
+            )),
+            redis_info: reg!(GaugeVec::new(
+                Opts::new("tee_redis_info", "Redis INFO snapshot; server-wide, not catalog-specific"),
+                &["field"]
+            )),
+            redis_info_up: reg!(Gauge::new("tee_redis_info_up", "Last Redis INFO collection succeeded")),
             dependency: reg!(GaugeVec::new(
                 Opts::new("tee_dependency_up", "Last dependency probe success"),
                 &["dependency"]
@@ -131,6 +149,9 @@ impl Metrics {
         for result in ["hit", "miss", "error"] {
             self.cache.with_label_values(&[result]).inc_by(0);
         }
+        for result in ["success", "error", "skipped"] {
+            self.cache_writes.with_label_values(&[result]).inc_by(0);
+        }
         let m = self.clone();
         tokio::spawn(async move {
             let mut timer = tokio::time::interval(Duration::from_secs(15));
@@ -168,6 +189,20 @@ impl Metrics {
                 m.probe_seconds
                     .with_label_values(&["redis"])
                     .set(start.elapsed().as_secs_f64());
+                let info = tokio::time::timeout(Duration::from_secs(2), async {
+                    let mut c = state.cache.get_multiplexed_async_connection().await?;
+                    redis::cmd("INFO").query_async::<String>(&mut c).await
+                }).await;
+                if let Ok(Ok(info)) = info {
+                    m.redis_info_up.set(1.0);
+                    for (field, value) in redis_info_values(&info) {
+                        m.redis_info.with_label_values(&[field]).set(value);
+                    }
+                } else {
+                    m.redis_info_up.set(0.0);
+                    // Do not show old memory/key values as current during an outage.
+                    m.redis_info.reset();
+                }
                 m.pool
                     .with_label_values(&["open"])
                     .set(state.db.size() as f64);
@@ -323,4 +358,37 @@ pub async fn view(
         ],
     )
         .into_response())
+}
+
+fn redis_info_values(info: &str) -> Vec<(&'static str, f64)> {
+    let fields = ["used_memory", "maxmemory", "connected_clients", "evicted_keys", "expired_keys"];
+    let mut values = Vec::new();
+    let mut keys = 0.0;
+    for line in info.lines() {
+        if let Some((key, value)) = line.split_once(':') {
+            if let Some(field) = fields.iter().find(|field| **field == key) {
+                if let Ok(value) = value.trim().parse::<f64>() { values.push((*field, value)); }
+            }
+            if key.strip_prefix("db").is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+                if let Some(count) = value.split(',').find_map(|part| part.strip_prefix("keys=")) {
+                    keys += count.parse::<f64>().unwrap_or(0.0);
+                }
+            }
+        }
+    }
+    values.push(("keys", keys));
+    values
+}
+
+#[cfg(test)]
+mod redis_info_tests {
+    use super::*;
+    #[test]
+    fn parses_memory_and_sums_databases() {
+        let values = redis_info_values("# Memory\r\nused_memory:1024\r\nmaxmemory:0\r\ndb0:keys=2,expires=2,avg_ttl=10\r\ndb1:keys=3,expires=0\r\n");
+        assert!(values.contains(&("used_memory", 1024.0)));
+        assert!(values.contains(&("maxmemory", 0.0)));
+        assert!(values.contains(&("keys", 5.0)));
+        assert_eq!(redis_info_values("# Keyspace"), vec![("keys", 0.0)]);
+    }
 }

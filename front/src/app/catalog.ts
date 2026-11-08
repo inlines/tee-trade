@@ -15,7 +15,7 @@ export const categories = [
 export interface ProductImage { carousel?: boolean; url: string; alt: string; kind: 'front' | 'detail' | 'label'; }
 export interface Product {
   id: number; name: string; price_cents: number | null; category: string; brands: string[];
-  size: string; description: string; theme: string; images: ProductImage[]; is_demo: boolean; sold: boolean;
+  sizes: string[]; description: string; theme: string; images: ProductImage[]; is_demo: boolean; sold: boolean;
 }
 export interface LoadState<T> { loading: boolean; data: T | null; error: string; notFound: boolean; }
 export function loadState<T>(request: Observable<T>): Observable<LoadState<T>> {
@@ -31,7 +31,7 @@ export class CatalogService {
   private readonly http = inject(HttpClient);
   recordView(id:number) { this.http.post('/api/auth/product-views/'+id,{}).subscribe({error:()=>{}}); }
   list(category = '', sold = false) { return this.http.get<Product[]>('/api/products', { params: { ...(category ? {category} : {}), sold } }); }
-  page(category: string, sold: boolean, sort: string, limit: number, offset: number, brands: string[] = []) { return this.http.get<{items: Product[]; total: number; brands: string[]}>('/api/products/page', {params:{...(category ? {category} : {}), sold, sort, limit, offset, brands: JSON.stringify(brands)}}); }
+  page(category: string, sold: boolean, sort: string, limit: number, offset: number, brands: string[] = [], sizes: string[] = []) { return this.http.get<{items: Product[]; total: number; brands: string[]; sizes: string[]}>('/api/products/page', {params:{...(category ? {category} : {}), sold, sort, limit, offset, brands: JSON.stringify(brands), sizes: JSON.stringify(sizes)}}); }
   storefront() { return this.http.get<Storefront>('/api/storefront'); }
   product(id: string) { return this.http.get<Product>(`/api/products/${encodeURIComponent(id)}`); }
 }

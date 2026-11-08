@@ -5,6 +5,7 @@ export interface CatalogNavigation {
   sold: boolean;
   sort: string;
   brands: string[];
+  sizes: string[];
   limit: number;
   index: number;
   total: number;
@@ -22,6 +23,8 @@ export function parseCatalogNavigation(value: string | null): CatalogNavigation 
       || ![4, 8].includes(context.limit)
       || !Number.isSafeInteger(context.index) || context.index < 0
       || !Number.isSafeInteger(context.total) || context.total <= context.index) return null;
+    if(context.sizes === undefined) context.sizes = [];
+    if(!Array.isArray(context.sizes) || !context.sizes.every((size: unknown) => typeof size === 'string')) return null;
     return context;
   } catch {
     return null;

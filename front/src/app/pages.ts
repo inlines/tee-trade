@@ -52,6 +52,14 @@ export class HomePage {
   template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / {{ archived ? 'АРХИВ' : 'КАТАЛОГ' }}</p><h1>{{ title() }}</h1></section>
     @if(!archived){<nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
       @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>}
+    <section class="brand-filter" aria-label="Фильтр по размерам">
+      <button class="brand-filter-toggle" type="button" [attr.aria-expanded]="sizesOpen()" aria-controls="catalog-sizes" (click)="sizesOpen.set(!sizesOpen())">Размеры @if(selectedSizes().length){<span>({{selectedSizes().length}})</span>} <span aria-hidden="true">{{sizesOpen()?'−':'+'}}</span></button>
+      @if(sizesOpen()) { <div id="catalog-sizes" class="brand-tags">
+        @for(size of sizes(); track size) { <button type="button" class="brand-tag" [class.selected]="selectedSizes().includes(size)" [attr.aria-pressed]="selectedSizes().includes(size)" (click)="toggleSize(size)">{{size}}</button> }
+        @if(!sizes().length && !loading()){<p>В этой категории пока нет указанных размеров.</p>}
+        @if(selectedSizes().length){<button type="button" class="text-link" (click)="selectedSizes.set([])">Сбросить размеры</button>}
+      </div>}
+    </section>
     <section class="brand-filter" aria-label="Фильтр по брендам">
       <button class="brand-filter-toggle" type="button" [attr.aria-expanded]="brandsOpen()" aria-controls="catalog-brands" (click)="brandsOpen.set(!brandsOpen())">Бренды @if(selectedBrands().length){<span>({{selectedBrands().length}})</span>} <span aria-hidden="true">{{brandsOpen()?'−':'+'}}</span></button>
       @if(brandsOpen()) { <div id="catalog-brands" class="brand-tags">
@@ -88,15 +96,16 @@ export class CatalogPage {
     if(!this.items().length)return;
     this.history.save(this.entryId,{url:this.url(),items:this.items(),total:this.total(),offset:this.offset,
       hasMore:this.hasMore(),sort:this.sort(),selectedBrands:this.selectedBrands(),brands:this.brands(),
-      brandsOpen:this.brandsOpen(),pageSize:this.pageSize,y:window.scrollY});
+      selectedSizes:this.selectedSizes(),sizes:this.sizes(),sizesOpen:this.sizesOpen(),brandsOpen:this.brandsOpen(),pageSize:this.pageSize,y:window.scrollY});
   }
   private restore(snapshot:CatalogSnapshot) {
     this.request?.unsubscribe();
     this.items.set(snapshot.items);this.total.set(snapshot.total);this.offset=snapshot.offset;
     this.hasMore.set(snapshot.hasMore);this.sort.set(snapshot.sort);this.selectedBrands.set(snapshot.selectedBrands);
+    this.selectedSizes.set(snapshot.selectedSizes);this.sizes.set(snapshot.sizes);this.sizesOpen.set(snapshot.sizesOpen);
     this.brands.set(snapshot.brands);this.brandsOpen.set(snapshot.brandsOpen);this.pageSize=snapshot.pageSize;
     this.loading.set(false);this.error.set('');this.restoring.set(true);this.restoreY=snapshot.y;
-    this.filterKey=JSON.stringify([this.category(),snapshot.sort,snapshot.selectedBrands]);
+    this.filterKey=JSON.stringify([this.category(),snapshot.sort,snapshot.selectedBrands,snapshot.selectedSizes]);
   }
   readonly categories = categories;
   private readonly route = inject(ActivatedRoute);
@@ -105,6 +114,10 @@ export class CatalogPage {
   readonly validCategory = computed(() => !this.category() || categories.some(category => category.slug === this.category()));
   readonly archived = this.route.snapshot.data['archive']===true;
   readonly title = computed(() => this.archived ? 'Архив' : this.validCategory() ? (this.category() ? categoryName(this.category()) : 'Каталог') : 'Категория не найдена');
+  readonly sizesOpen = signal(false);
+  readonly sizes = signal<string[]>([]);
+  readonly selectedSizes = signal<string[]>([]);
+  toggleSize(size:string) { this.selectedSizes.update(values=>values.includes(size)?values.filter(value=>value!==size):[...values,size]); }
   readonly brandsOpen = signal(false);
   readonly brands = signal<string[]>([]);
   readonly selectedBrands = signal<string[]>([]);
@@ -120,7 +133,7 @@ export class CatalogPage {
   private offset = 0;
   private pageSize = window.matchMedia('(max-width:700px)').matches ? 4 : 8;
   productQuery(index: number) {
-    return { catalog: JSON.stringify({ category: this.category(), sold: this.archived, sort: this.sort(), brands: this.selectedBrands(), limit: this.pageSize, index, total: this.total() }) };
+    return { catalog: JSON.stringify({ category: this.category(), sold: this.archived, sort: this.sort(), brands: this.selectedBrands(), sizes: this.selectedSizes(), limit: this.pageSize, index, total: this.total() }) };
   }
   private request?: Subscription;
   constructor() {
@@ -140,7 +153,7 @@ export class CatalogPage {
       }
     });
     effect(() => {
-      const category=this.category(); const key=JSON.stringify([category,this.sort(),this.selectedBrands()]);
+      const category=this.category(); const key=JSON.stringify([category,this.sort(),this.selectedBrands(),this.selectedSizes()]);
       untracked(() => {
         if(key===this.filterKey)return;
         const restoredId=this.restoredId;this.restoredId=undefined;
@@ -149,7 +162,7 @@ export class CatalogPage {
         this.fromProduct=false;
         if(snapshot){this.lastCategory=category;this.restore(snapshot);return;}
         this.filterKey=key;
-        if(category!==this.lastCategory){ this.lastCategory=category; this.selectedBrands.set([]); this.brands.set([]); }
+        if(category!==this.lastCategory){ this.lastCategory=category; this.selectedBrands.set([]); this.brands.set([]); this.selectedSizes.set([]); this.sizes.set([]); }
         this.request?.unsubscribe(); this.items.set([]); this.offset=0;
         this.pageSize=window.matchMedia('(max-width:700px)').matches?4:8;
         this.total.set(0); this.hasMore.set(true); this.loading.set(false); this.error.set('');
@@ -162,9 +175,9 @@ export class CatalogPage {
     if(this.loading() || !this.hasMore()) return;
     this.loading.set(true); this.error.set('');
     const limit=this.pageSize;
-    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset,this.selectedBrands()).subscribe({
+    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset,this.selectedBrands(),this.selectedSizes()).subscribe({
       next: page => {
-        this.brands.set(page.brands);
+        this.brands.set(page.brands); this.sizes.set(page.sizes);
         this.offset+=page.items.length;
         this.items.update(items=>{const ids=new Set(items.map(p=>p.id));return [...items,...page.items.filter(p=>!ids.has(p.id))];});
         this.total.set(page.total); this.hasMore.set(page.items.length>0 && this.offset<page.total); this.loading.set(false);
@@ -201,7 +214,7 @@ export class CatalogPage {
           }</div>
         </div>
         <div class="product-info">@if (product.brands.length) { <p class="eyebrow">{{ product.brands.join(' × ') }}</p> }<h1>{{ product.name || 'Без названия' }}</h1><p class="detail-price">{{ product.price_cents === null ? 'Цена не указана' : (product.price_cents! / 100 | currency:'RUB':'symbol':'1.0-2':'ru') }}</p>
-          <dl><div><dt>Бренды</dt><dd>{{ product.brands.join(' × ') || 'Не указаны' }}</dd></div><div><dt>Размер</dt><dd>{{ product.size || 'Не указан' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
+          <dl><div><dt>Бренды</dt><dd>{{ product.brands.join(' × ') || 'Не указаны' }}</dd></div><div><dt>Размеры</dt><dd>{{ product.sizes.join(' · ') || 'Не указаны' }}</dd></div><div><dt>Тематика</dt><dd>{{ product.theme || 'Не указан' }}</dd></div><div><dt>Категория</dt><dd><a [routerLink]="product.category ? ['/catalog', product.category] : ['/catalog']">{{ categoryName(product.category) }}</a></dd></div></dl>
           @if(product.sold){<p class="demo-note">Продано · Товар в архиве</p>}
           <section class="description"><h2>О вещи</h2><p>{{ product.description || 'Описание пока не добавлено.' }}</p></section>
           @if (product.is_demo) { <p class="demo-note">Демонстрационный товар. В галерее — иллюстрации, включая шаблон ярлычка. Они не заменяют фотографии реальной вещи.</p> }
@@ -263,7 +276,7 @@ export class ProductPage {
     this.navigating.set(true);
     this.navigationError.set('');
     const offset = Math.floor(index / context.limit) * context.limit;
-    this.navigationRequest = this.api.page(context.category, context.sold, context.sort, context.limit, offset, context.brands).subscribe({
+    this.navigationRequest = this.api.page(context.category, context.sold, context.sort, context.limit, offset, context.brands, context.sizes).subscribe({
       next: page => {
         const product = page.items[index - offset];
         if (!product) {

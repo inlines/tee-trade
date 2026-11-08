@@ -7,9 +7,9 @@ const compile = source => ts.transpileModule(source, {compilerOptions:{module:ts
 const signal = value => Object.assign(() => value, {set: next => value = next});
 const parsed = {};
 vm.runInNewContext(compile(fs.readFileSync('front/src/app/catalog-navigation.ts','utf8')), {exports:parsed, require:()=>({categories:[{slug:'t-shirts'}]})});
-const context = {category:'t-shirts',sold:false,sort:'price-desc',brands:['Brand'],limit:4,index:3,total:10};
+const context = {category:'t-shirts',sold:false,sort:'price-desc',brands:['Brand'],sizes:['US 9','EU 42'],limit:4,index:3,total:10};
 assert.equal(parsed.parseCatalogNavigation(JSON.stringify(context)).index,3);
-for (const value of [null,'{','null',JSON.stringify({...context,index:-1}),JSON.stringify({...context,limit:100}),JSON.stringify({...context,brands:[1]})]) assert.equal(parsed.parseCatalogNavigation(value),null);
+for (const value of [null,'{','null',JSON.stringify({...context,index:-1}),JSON.stringify({...context,limit:100}),JSON.stringify({...context,brands:[1]}),JSON.stringify({...context,sizes:[1]})]) assert.equal(parsed.parseCatalogNavigation(value),null);
 const source = fs.readFileSync('front/src/app/pages.ts','utf8').split('export class ProductPage {')[1].split('\n@Component')[0];
 class Element { constructor(interactive=false) {this.interactive=interactive;} closest(){return this.interactive;} }
 const exported = {};
@@ -18,7 +18,7 @@ const page = Object.create(exported.ProductPage.prototype);
 let observer, args, destination;
 Object.assign(page, {admin:{session:()=>true},navigation:()=>context,navigating:signal(false),navigationError:signal(''),api:{page(...values){args=values;return {subscribe(value){observer=value;return {unsubscribe(){}};}};}},router:{navigate(path,options){destination={path,options};return Promise.resolve(true);}}});
 page.navigateProduct(1);
-assert.equal(args[0],'t-shirts');assert.equal(args[2],'price-desc');assert.equal(args[3],4);assert.equal(args[4],4);assert.equal(args[5][0],'Brand');
+assert.equal(args[0],'t-shirts');assert.equal(args[2],'price-desc');assert.equal(args[3],4);assert.equal(args[4],4);assert.equal(args[5][0],'Brand');assert.equal(args[6].join(','),'US 9,EU 42');
 observer.next({items:[{id:55},{id:56}],total:10});
 assert.equal(destination.path.join('/'),'/product/55');assert.equal(JSON.parse(destination.options.queryParams.catalog).index,4);
 page.navigating.set(false);context.index=4;page.navigateProduct(-1);assert.equal(args[4],0);

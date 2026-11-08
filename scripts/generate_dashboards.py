@@ -40,7 +40,7 @@ def status(d,title,expr,x,y):
  p=panel(d,title,expr,x,y,6,4,'stat',thresholds=[{'color':'red','value':None},{'color':'green','value':1}])
  p['fieldConfig']['defaults']['mappings']=[{'type':'value','options':{'0':{'text':'НЕДОСТУПНО','color':'red'},'1':{'text':'OK','color':'green'}}}]
  return p
-api=dashboard('tee-trade-api','FUTBA — здоровье API')
+api=dashboard('tee-trade-api','FUTBA — активность и здоровье API')
 api['templating']['list']=[{'name':'route','label':'Маршрут API','type':'query','datasource':DS,'query':'label_values(http_request_duration_seconds_count{route=~"/api/.*"}, route)','refresh':1,'includeAll':True,'allValue':'.*','multi':True,'current':{'text':'All','value':'$__all'}}]
 status(api,'API / сбор метрик','up{job="tee-trade-api"}',0,0)
 status(api,'PostgreSQL из приложения','tee_dependency_up{dependency="postgres"}',6,0)
@@ -62,7 +62,26 @@ panel(api,'Каталог: попадания, промахи и ошибки к
 panel(api,'Задержка проверки зависимостей','tee_dependency_probe_seconds',12,32,unit='s')
 panel(api,'Пул соединений приложения','tee_db_pool_connections',0,40)
 panel(api,'Время сбора метрик API','scrape_duration_seconds{job="tee-trade-api"}',12,40,unit='s')
-note(api,'API-метрики исключают health-check и scrape из нагрузки по маршрутам. Счётчики перезапускаются вместе с API; rate учитывает сбросы. Для анализа ошибок сопоставляйте 5xx, задержки и доступность зависимостей.',48)
+# Catalog hit ratio excludes failed lookups; errors remain visible in separate panels.
+hits='sum(increase(tee_catalog_cache_total{result="hit"}[$__range]))'
+lookups='sum(increase(tee_catalog_cache_total{result=~"hit|miss"}[$__range]))'
+ratio=f'100*{hits}/({lookups}>0)'
+p=panel(api,'Redis: hit ratio за выбранный период',ratio,0,48,6,4,'stat','percent',desc='Доля ответов каталога из Redis: hit / (hit + miss). Ошибки чтения исключены и показаны отдельно. При отсутствии обращений — нет данных. Фильтр маршрута API на этот блок не влияет.')
+p['fieldConfig']['defaults']['min']=0;p['fieldConfig']['defaults']['max']=100
+panel(api,'Redis: попадания за период',hits,6,48,6,4,'stat',desc='Число ответов из кэша каталога за выбранный диапазон времени. increase может давать дробные значения из-за интерполяции между scrape.')
+panel(api,'Redis: промахи за период','sum(increase(tee_catalog_cache_total{result="miss"}[$__range]))',12,48,6,4,'stat',desc='Ключ не найден: данные загружаются из PostgreSQL. После изменения товара версия кэша меняется; первые обращения закономерно дают промахи.')
+panel(api,'Redis: ошибки чтения за период','sum(increase(tee_catalog_cache_total{result="error"}[$__range]))',18,48,6,4,'stat',desc='Таймаут, ошибка Redis или повреждённый JSON; запрос продолжает работать через PostgreSQL.',thresholds=[{'color':'green','value':None},{'color':'red','value':1}])
+panel(api,'Redis: hit ratio во времени','100*sum(rate(tee_catalog_cache_total{result="hit"}[$__rate_interval])) / (sum(rate(tee_catalog_cache_total{result=~"hit|miss"}[$__rate_interval]))>0)',0,52,unit='percent',desc='Скользящее окно $__rate_interval. Пробелы означают отсутствие обращений к кэшу.')
+panel(api,'Redis: запись в кэш',[(f'sum(rate(tee_catalog_cache_writes_total{{result="{result}"}}[$__rate_interval]))',label) for result,label in [('success','Успешно'),('error','Ошибка'),('skipped','Пропущено: ответ больше 2 МиБ')]],12,52,unit='ops',desc='Запись выполняется после загрузки данных из базы. Ошибки записи не мешают получить ответ, но приводят к повторным промахам.')
+panel(api,'Redis: задержка чтения p50 / p95',[(f'histogram_quantile({q},sum by(le)(rate(tee_catalog_cache_read_seconds_bucket[$__rate_interval])))',name) for q,name in [(0.5,'p50'),(0.95,'p95')]],0,60,unit='s',desc='Включая создание соединения. Бюджет чтения — 150 мс; проверка версии каталога в PostgreSQL сюда не входит.')
+panel(api,'Redis: ошибки записи за период','sum(increase(tee_catalog_cache_writes_total{result="error"}[$__range]))',12,60,6,4,'stat',thresholds=[{'color':'green','value':None},{'color':'red','value':1}])
+status(api,'Redis: сбор INFO','tee_redis_info_up',18,60)
+panel(api,'Redis: память',[('tee_redis_info{field="used_memory"}','Используется'),('tee_redis_info{field="maxmemory"}','Лимит')],0,68,unit='bytes',desc='Память всего Redis, включая служебные структуры. maxmemory=0 означает отсутствие лимита.')
+panel(api,'Redis: занято от лимита, %','100*sum(tee_redis_info{field="used_memory"}) / (sum(tee_redis_info{field="maxmemory"})>0)',12,68,6,4,'stat','percent',desc='При отключённом лимите — нет данных.',thresholds=[{'color':'green','value':None},{'color':'orange','value':80},{'color':'red','value':95}])
+panel(api,'Redis: ключей сейчас','tee_redis_info{field="keys"}',18,68,6,4,'stat',desc='Все ключи во всех базах Redis, включая предыдущие версии каталога до истечения TTL.')
+panel(api,'Redis: удаления ключей',[('sum(rate(tee_redis_info{field="evicted_keys"}[$__rate_interval]))','Вытеснено по лимиту памяти'),('sum(rate(tee_redis_info{field="expired_keys"}[$__rate_interval]))','Истёк TTL')],0,76,unit='ops',desc='INFO содержит накопительные счётчики с момента запуска Redis; rate учитывает сбросы. Это метрики всего Redis.')
+panel(api,'Redis: подключённых клиентов','tee_redis_info{field="connected_clients"}',12,76,unit='short',desc='Моментальный снимок INFO раз в 15 секунд, включая соединение мониторинга.')
+note(api,'API-метрики исключают health-check и scrape из нагрузки по маршрутам. Счётчики перезапускаются вместе с API; rate/increase учитывают сбросы. Блок Redis не зависит от фильтра маршрутов: измеряется весь публичный кэш каталога (списки, страницы товаров, витрина). Hit означает ответ из Redis, а не полное отсутствие запросов в БД: версия каталога проверяется в PostgreSQL. После редактирования товаров кэш заполняется заново. TTL — 1 час; старые версии также могут вытесняться LRU. Повторное открытие одного раздела обычно увеличивает hit, первый запрос — miss. Приватные данные не кэшируются. INFO обновляется раз в 15 секунд; отсутствие данных при ошибке сбора не означает нулевую память.',84,5)
 save(api,'api.json')
 db=dashboard('tee-trade-postgres','FUTBA — здоровье PostgreSQL')
 db['templating']['list']=[{'name':'database','label':'База','type':'query','datasource':DS,'query':'label_values(pg_database_size_bytes{datname!~"template.*|postgres"}, datname)','refresh':1,'multi':False,'includeAll':False}]

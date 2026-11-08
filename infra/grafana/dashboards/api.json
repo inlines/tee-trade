@@ -1,6 +1,6 @@
 {
   "uid": "tee-trade-api",
-  "title": "FUTBA — здоровье API",
+  "title": "FUTBA — активность и здоровье API",
   "schemaVersion": 39,
   "version": 2,
   "refresh": "30s",
@@ -1174,17 +1174,917 @@
     },
     {
       "id": 19,
+      "title": "Redis: hit ratio за выбранный период",
+      "description": "Доля ответов каталога из Redis: hit / (hit + miss). Ошибки чтения исключены и показаны отдельно. При отсутствии обращений — нет данных. Фильтр маршрута API на этот блок не влияет.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(increase(tee_catalog_cache_total{result=\"hit\"}[$__range]))/(sum(increase(tee_catalog_cache_total{result=~\"hit|miss\"}[$__range]))>0)",
+          "legendFormat": "Redis: hit ratio за выбранный период",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Redis: попадания за период",
+      "description": "Число ответов из кэша каталога за выбранный диапазон времени. increase может давать дробные значения из-за интерполяции между scrape.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 48,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(tee_catalog_cache_total{result=\"hit\"}[$__range]))",
+          "legendFormat": "Redis: попадания за период",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Redis: промахи за период",
+      "description": "Ключ не найден: данные загружаются из PostgreSQL. После изменения товара версия кэша меняется; первые обращения закономерно дают промахи.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(tee_catalog_cache_total{result=\"miss\"}[$__range]))",
+          "legendFormat": "Redis: промахи за период",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "Redis: ошибки чтения за период",
+      "description": "Таймаут, ошибка Redis или повреждённый JSON; запрос продолжает работать через PostgreSQL.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 48,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(tee_catalog_cache_total{result=\"error\"}[$__range]))",
+          "legendFormat": "Redis: ошибки чтения за период",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Redis: hit ratio во времени",
+      "description": "Скользящее окно $__rate_interval. Пробелы означают отсутствие обращений к кэшу.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(rate(tee_catalog_cache_total{result=\"hit\"}[$__rate_interval])) / (sum(rate(tee_catalog_cache_total{result=~\"hit|miss\"}[$__rate_interval]))>0)",
+          "legendFormat": "Redis: hit ratio во времени",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "Redis: запись в кэш",
+      "description": "Запись выполняется после загрузки данных из базы. Ошибки записи не мешают получить ответ, но приводят к повторным промахам.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 52,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(tee_catalog_cache_writes_total{result=\"success\"}[$__rate_interval]))",
+          "legendFormat": "Успешно",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(tee_catalog_cache_writes_total{result=\"error\"}[$__rate_interval]))",
+          "legendFormat": "Ошибка",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(tee_catalog_cache_writes_total{result=\"skipped\"}[$__rate_interval]))",
+          "legendFormat": "Пропущено: ответ больше 2 МиБ",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "Redis: задержка чтения p50 / p95",
+      "description": "Включая создание соединения. Бюджет чтения — 150 мс; проверка версии каталога в PostgreSQL сюда не входит.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5,sum by(le)(rate(tee_catalog_cache_read_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95,sum by(le)(rate(tee_catalog_cache_read_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "Redis: ошибки записи за период",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(tee_catalog_cache_writes_total{result=\"error\"}[$__range]))",
+          "legendFormat": "Redis: ошибки записи за период",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 27,
+      "title": "Redis: сбор INFO",
+      "description": "",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 60,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_redis_info_up",
+          "legendFormat": "Redis: сбор INFO",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "НЕДОСТУПНО",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "OK",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 28,
+      "title": "Redis: память",
+      "description": "Память всего Redis, включая служебные структуры. maxmemory=0 означает отсутствие лимита.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_redis_info{field=\"used_memory\"}",
+          "legendFormat": "Используется",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "tee_redis_info{field=\"maxmemory\"}",
+          "legendFormat": "Лимит",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 29,
+      "title": "Redis: занято от лимита, %",
+      "description": "При отключённом лимите — нет данных.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 68,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100*sum(tee_redis_info{field=\"used_memory\"}) / (sum(tee_redis_info{field=\"maxmemory\"})>0)",
+          "legendFormat": "Redis: занято от лимита, %",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 30,
+      "title": "Redis: ключей сейчас",
+      "description": "Все ключи во всех базах Redis, включая предыдущие версии каталога до истечения TTL.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 68,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_redis_info{field=\"keys\"}",
+          "legendFormat": "Redis: ключей сейчас",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 12
+        }
+      }
+    },
+    {
+      "id": 31,
+      "title": "Redis: удаления ключей",
+      "description": "INFO содержит накопительные счётчики с момента запуска Redis; rate учитывает сбросы. Это метрики всего Redis.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(tee_redis_info{field=\"evicted_keys\"}[$__rate_interval]))",
+          "legendFormat": "Вытеснено по лимиту памяти",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(tee_redis_info{field=\"expired_keys\"}[$__rate_interval]))",
+          "legendFormat": "Истёк TTL",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 32,
+      "title": "Redis: подключённых клиентов",
+      "description": "Моментальный снимок INFO раз в 15 секунд, включая соединение мониторинга.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 76,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tee_redis_info{field=\"connected_clients\"}",
+          "legendFormat": "Redis: подключённых клиентов",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 33,
       "type": "text",
       "title": "Как читать дашборд",
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 84,
         "w": 24,
-        "h": 3
+        "h": 5
       },
       "options": {
         "mode": "markdown",
-        "content": "API-метрики исключают health-check и scrape из нагрузки по маршрутам. Счётчики перезапускаются вместе с API; rate учитывает сбросы. Для анализа ошибок сопоставляйте 5xx, задержки и доступность зависимостей."
+        "content": "API-метрики исключают health-check и scrape из нагрузки по маршрутам. Счётчики перезапускаются вместе с API; rate/increase учитывают сбросы. Блок Redis не зависит от фильтра маршрутов: измеряется весь публичный кэш каталога (списки, страницы товаров, витрина). Hit означает ответ из Redis, а не полное отсутствие запросов в БД: версия каталога проверяется в PostgreSQL. После редактирования товаров кэш заполняется заново. TTL — 1 час; старые версии также могут вытесняться LRU. Повторное открытие одного раздела обычно увеличивает hit, первый запрос — miss. Приватные данные не кэшируются. INFO обновляется раз в 15 секунд; отсутствие данных при ошибке сбора не означает нулевую память."
       }
     }
   ],

@@ -87,6 +87,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .route("/api/admin/products", get(list).post(create))
         .route("/api/admin/products/page", get(product_page))
         .route("/api/admin/products/brands", get(brands))
+        .route("/api/admin/products/sizes", get(sizes))
         .route("/api/admin/products/labels", get(product_labels))
         .route(
             "/api/admin/products/{id}",
@@ -273,7 +274,7 @@ async fn product_page(
         .map_err(internal)?;
     let filter = "sold=$1 AND strpos(lower(name || ' ' || array_to_string(brands, ' ')),lower($2))>0";
     let filter = if q.incomplete {
-        format!("{filter} AND (btrim(name)='' OR btrim(category)='' OR cardinality(brands)=0 OR btrim(size)='' OR btrim(description)='' OR btrim(theme)='' OR price_cents IS NULL OR jsonb_array_length(images)=0)")
+        format!("{filter} AND (btrim(name)='' OR btrim(category)='' OR cardinality(brands)=0 OR cardinality(sizes)=0 OR btrim(description)='' OR btrim(theme)='' OR price_cents IS NULL OR jsonb_array_length(images)=0)")
     } else { filter.to_owned() };
     let total = sqlx::query_scalar(&format!("SELECT count(*) FROM products WHERE {filter}"))
         .bind(q.sold)
@@ -311,6 +312,9 @@ async fn product_detail(
 async fn brands(State(s): State<AppState>) -> Result<Json<Vec<String>>, ApiError> {
     Ok(Json(sqlx::query_scalar("SELECT min(btrim(brand)) FROM products CROSS JOIN LATERAL unnest(brands) AS brand WHERE btrim(brand)<>'' GROUP BY lower(btrim(brand)) ORDER BY lower(btrim(brand))").fetch_all(&s.db).await.map_err(internal)?))
 }
+async fn sizes(State(s): State<AppState>) -> Result<Json<Vec<String>>, ApiError> {
+    Ok(Json(sqlx::query_scalar("SELECT min(btrim(size)) FROM products CROSS JOIN LATERAL unnest(sizes) AS size WHERE btrim(size)<>'' GROUP BY lower(btrim(size)) ORDER BY lower(btrim(size))").fetch_all(&s.db).await.map_err(internal)?))
+}
 #[derive(Deserialize)]
 struct LabelQuery {
     ids: String,
@@ -344,7 +348,7 @@ struct ProductInput {
     price_cents: Option<i32>,
     category: String,
     brands: Vec<String>,
-    size: String,
+    sizes: Vec<String>,
     description: String,
     theme: String,
     images: Vec<ProductImage>,
@@ -353,6 +357,9 @@ struct ProductInput {
     sold: bool,
 }
 fn normalize_brands(input: &mut ProductInput) {
+    let mut seen_sizes = HashSet::new();
+    input.sizes = input.sizes.iter().map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty() && seen_sizes.insert(v.to_lowercase())).collect();
     let mut seen = HashSet::new();
     input.brands = input.brands.iter().map(|b| b.trim().to_owned())
         .filter(|b| !b.is_empty() && seen.insert(b.to_lowercase())).collect();
@@ -367,7 +374,7 @@ async fn validate_product(
 ) -> Result<(), ApiError> {
     if input.name.chars().count() > 160
         || input.brands.len() > 50 || input.brands.iter().any(|b| b.trim().is_empty() || b.chars().count() > 100)
-        || input.size.chars().count() > 100
+        || input.sizes.len() > 50 || input.sizes.iter().any(|s| s.trim().is_empty() || s.chars().count() > 100)
         || input.theme.chars().count() > 160
         || input.description.chars().count() > 10000
     {
@@ -427,8 +434,8 @@ async fn create(
         .map_err(internal)?;
     normalize_brands(&mut input);
     validate_product(&input, None, &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brands, size, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(&input.brands).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("INSERT INTO products (name, price_cents, category, brands, sizes, description, theme, images, is_demo, sold) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(&input.brands).bind(&input.sizes).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await
@@ -532,8 +539,8 @@ async fn update(
     .ok_or((StatusCode::NOT_FOUND, "Товар не найден"))?;
     normalize_brands(&mut input);
     validate_product(&input, Some(&existing), &state.db).await?;
-    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brands=$4, size=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
-        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(&input.brands).bind(input.size.trim()).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
+    let product = sqlx::query_as::<_, Product>(&format!("UPDATE products SET name=$1, price_cents=$2, category=$3, brands=$4, sizes=$5, description=$6, theme=$7, images=$8, is_demo=$9, sold=$10 WHERE id=$11 RETURNING {PRODUCT_COLUMNS}"))
+        .bind(input.name.trim()).bind(input.price_cents).bind(input.category).bind(&input.brands).bind(&input.sizes).bind(input.description.trim()).bind(input.theme.trim()).bind(sqlx::types::Json(input.images)).bind(input.is_demo).bind(input.sold).bind(id).fetch_one(&mut *tx).await.map_err(internal)?;
     sqlx::query("UPDATE catalog_revision SET version = version + 1")
         .execute(&mut *tx)
         .await

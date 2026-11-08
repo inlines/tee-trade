@@ -15,11 +15,13 @@ where
         .await
         .map_err(internal)?;
     let key = format!("catalog:v1:{revision}:{resource}");
+    let timer = state.monitoring.cache_read_seconds.with_label_values::<&str>(&[]).start_timer();
     let cached = tokio::time::timeout(Duration::from_millis(150), async {
         let mut connection = state.cache.get_multiplexed_async_connection().await?;
         connection.get::<_, Option<String>>(&key).await
     })
     .await;
+    timer.observe_duration();
     let outcome = match cached {
         Ok(Ok(Some(json))) => match serde_json::from_str(&json) {
             Ok(value) => {
@@ -37,12 +39,19 @@ where
         // Large responses must not evict the entire working set. Errors/404s
         // never enter Redis. Old revisions expire and are also subject to LRU.
         if json.len() <= 2 * 1024 * 1024 {
-            let _ = tokio::time::timeout(Duration::from_millis(150), async {
+            let result = tokio::time::timeout(Duration::from_millis(150), async {
                 let mut connection = state.cache.get_multiplexed_async_connection().await?;
                 connection.set_ex::<_, _, ()>(&key, json, 3600).await
             })
             .await;
+            state.monitoring.cache_writes.with_label_values(&[
+                if matches!(result, Ok(Ok(()))) { "success" } else { "error" }
+            ]).inc();
+        } else {
+            state.monitoring.cache_writes.with_label_values(&["skipped"]).inc();
         }
+    } else {
+        state.monitoring.cache_writes.with_label_values(&["error"]).inc();
     }
     Ok(value)
 }
