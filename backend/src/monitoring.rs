@@ -23,6 +23,7 @@ pub struct Metrics {
     probe_seconds: GaugeVec,
     pool: GaugeVec,
     business: GaugeVec,
+    product_views: GaugeVec,
     backlog: GaugeVec,
     cohorts: GaugeVec,
     business_up: Gauge,
@@ -104,6 +105,10 @@ impl Metrics {
                     "Persisted event counts in rolling windows, not counters"
                 ),
                 &["window", "event"]
+            )),
+            product_views: reg!(GaugeVec::new(
+                Opts::new("tee_product_views_top", "Top 20 product views per rolling window, including anonymous visitors"),
+                &["window", "product_id", "product_name"]
             )),
             backlog: reg!(GaugeVec::new(
                 Opts::new("tee_requests_current", "Current request count by status"),
@@ -241,12 +246,20 @@ impl Metrics {
         let oldest:f64=sqlx::query_scalar("SELECT COALESCE(extract(epoch FROM now()-min(created_at)),0)::float8 FROM purchase_requests WHERE status='new'").fetch_one(&mut *tx).await?;
         let mut events = Vec::new();
         let mut cohorts = Vec::new();
+        let mut product_views = Vec::new();
         for (window, seconds) in [
             ("24h", 86400i64),
             ("7d", 604800),
             ("30d", 2592000),
             ("90d", 7776000),
         ] {
+            let rows: Vec<(i32, String, i64)> = sqlx::query_as(include_str!("business_product_views.sql"))
+                .bind(seconds)
+                .fetch_all(&mut *tx)
+                .await?;
+            for (id, name, count) in rows {
+                product_views.push((window, id, name, count));
+            }
             let rows: Vec<(String, i64)> = sqlx::query_as(include_str!("business_events.sql"))
                 .bind(seconds)
                 .fetch_all(&mut *tx)
@@ -267,6 +280,10 @@ impl Metrics {
                 .fetch_all(&mut *tx)
                 .await?;
         tx.commit().await?;
+        self.product_views.reset();
+        for (window, id, name, count) in product_views {
+            self.product_views.with_label_values(&[window, &id.to_string(), &name]).set(count as f64);
+        }
         for (window, event, count) in events {
             self.business
                 .with_label_values(&[window, &event])
