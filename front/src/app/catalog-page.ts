@@ -12,6 +12,9 @@ import { ProductCard } from './product-card';
   template: `<section class="page-intro"><p class="eyebrow"><a routerLink="/">ГЛАВНАЯ</a> / {{ archived ? 'АРХИВ' : 'КАТАЛОГ' }}</p><h1>{{ title() }}</h1></section>
     @if(!archived){<nav class="catalog-tabs" aria-label="Категории каталога"><a routerLink="/catalog" routerLinkActive="selected" [routerLinkActiveOptions]="{exact:true}" ariaCurrentWhenActive="page">Все вещи</a>
       @for (category of categories; track category.slug) { <a [routerLink]="['/catalog', category.slug]" routerLinkActive="selected" ariaCurrentWhenActive="page">{{ category.name }}</a> }</nav>}
+    <form class="catalog-search" role="search" (submit)="applySearch($event, searchInput.value)">
+      <label for="catalog-search-input">Поиск товаров</label><div><input #searchInput id="catalog-search-input" type="search" maxlength="160" [value]="search()" placeholder="Название, бренд или описание"><button class="button dark" type="submit">Найти</button>@if(search()){<button class="button" type="button" (click)="searchInput.value=''; search.set('')">Сбросить</button>}</div>
+    </form>
     <section class="brand-filter" aria-label="Фильтр по размерам">
       <button class="brand-filter-toggle" type="button" [attr.aria-expanded]="sizesOpen()" aria-controls="catalog-sizes" (click)="sizesOpen.set(!sizesOpen())">Размеры @if(selectedSizes().length){<span>({{selectedSizes().length}})</span>} <span aria-hidden="true">{{sizesOpen()?'−':'+'}}</span></button>
       @if(sizesOpen()) { <div id="catalog-sizes" class="brand-tags">
@@ -33,7 +36,7 @@ import { ProductCard } from './product-card';
       @if (loading() && !items().length) { <p class="status catalog-loading" role="status">Загружаем вещи…</p> }
       @else {
         <div class="catalog-toolbar"><p>Позиций: {{ total() }}</p><label>Сортировка <select [value]="sort()" (change)="setSort($event)"><option value="default">По умолчанию</option><option value="price-asc">Сначала дешевле</option><option value="price-desc">Сначала дороже</option></select></label></div>
-        <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" [headingLevel]="2" [catalogQuery]="productQuery(i)" /> } @empty { @if(!error()){ <div class="status"><h2>{{archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
+        <div class="product-grid">@for (product of items(); track product.id; let i = $index) { <app-product-card [product]="product" [priority]="i < 2" [headingLevel]="2" [catalogQuery]="productQuery(i)" /> } @empty { @if(!error()){ <div class="status"><h2>{{search()?'По вашему запросу ничего не найдено':archived?'В архиве пока нет товаров':'В этой категории пока нет вещей'}}</h2><a routerLink="/catalog" class="text-link">Посмотреть весь каталог →</a></div> } }</div>
         @if (loading()) { <p class="status" role="status">Загружаем вещи…</p> }
         @else if (error()) { <div class="status" role="alert"><p>{{error()}}</p><button class="button" (click)="loadMore()">Повторить</button></div> }
         @else if (hasMore() && !restoring()) { <app-catalog-end (reached)="loadMore()" /> }
@@ -55,18 +58,21 @@ export class CatalogPage {
   private savePosition() {
     if(!this.items().length)return;
     this.history.save(this.entryId,{url:this.url(),items:this.items(),total:this.total(),offset:this.offset,
-      hasMore:this.hasMore(),sort:this.sort(),selectedBrands:this.selectedBrands(),brands:this.brands(),
+      hasMore:this.hasMore(),search:this.search(),sort:this.sort(),selectedBrands:this.selectedBrands(),brands:this.brands(),
       selectedSizes:this.selectedSizes(),sizes:this.sizes(),sizesOpen:this.sizesOpen(),brandsOpen:this.brandsOpen(),pageSize:this.pageSize,y:window.scrollY});
   }
   private restore(snapshot:CatalogSnapshot) {
     this.request?.unsubscribe();
+    this.search.set(snapshot.search ?? '');
     this.items.set(snapshot.items);this.total.set(snapshot.total);this.offset=snapshot.offset;
     this.hasMore.set(snapshot.hasMore);this.sort.set(snapshot.sort);this.selectedBrands.set(snapshot.selectedBrands);
     this.selectedSizes.set(snapshot.selectedSizes);this.sizes.set(snapshot.sizes);this.sizesOpen.set(snapshot.sizesOpen);
     this.brands.set(snapshot.brands);this.brandsOpen.set(snapshot.brandsOpen);this.pageSize=snapshot.pageSize;
     this.loading.set(false);this.error.set('');this.restoring.set(true);this.restoreY=snapshot.y;
-    this.filterKey=JSON.stringify([this.category(),snapshot.sort,snapshot.selectedBrands,snapshot.selectedSizes]);
+    this.filterKey=JSON.stringify([this.category(),snapshot.sort,snapshot.selectedBrands,snapshot.selectedSizes,snapshot.search ?? '']);
   }
+  readonly search = signal('');
+  applySearch(event:Event,value:string){event.preventDefault();this.search.set(value.trim());}
   readonly categories = categories;
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(CatalogService);
@@ -93,7 +99,7 @@ export class CatalogPage {
   private offset = 0;
   private pageSize = window.matchMedia('(max-width:700px)').matches ? 4 : 8;
   productQuery(index: number) {
-    return { catalog: JSON.stringify({ category: this.category(), sold: this.archived, sort: this.sort(), brands: this.selectedBrands(), sizes: this.selectedSizes(), limit: this.pageSize, index, total: this.total() }) };
+    return { catalog: JSON.stringify({ category: this.category(), sold: this.archived, sort: this.sort(), search:this.search(), brands: this.selectedBrands(), sizes: this.selectedSizes(), limit: this.pageSize, index, total: this.total() }) };
   }
   private request?: Subscription;
   constructor() {
@@ -113,7 +119,7 @@ export class CatalogPage {
       }
     });
     effect(() => {
-      const category=this.category(); const key=JSON.stringify([category,this.sort(),this.selectedBrands(),this.selectedSizes()]);
+      const category=this.category(); const key=JSON.stringify([category,this.sort(),this.selectedBrands(),this.selectedSizes(),this.search()]);
       untracked(() => {
         if(key===this.filterKey)return;
         const restoredId=this.restoredId;this.restoredId=undefined;
@@ -135,7 +141,7 @@ export class CatalogPage {
     if(this.loading() || !this.hasMore()) return;
     this.loading.set(true); this.error.set('');
     const limit=this.pageSize;
-    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset,this.selectedBrands(),this.selectedSizes()).subscribe({
+    this.request=this.api.page(this.category(),this.archived,this.sort(),limit,this.offset,this.selectedBrands(),this.selectedSizes(),this.search()).subscribe({
       next: page => {
         this.brands.set(page.brands); this.sizes.set(page.sizes);
         this.offset+=page.items.length;

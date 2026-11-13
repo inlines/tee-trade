@@ -4,6 +4,7 @@ import { Product } from './catalog';
 
 export interface CatalogSnapshot {
   url: string; items: Product[]; total: number; offset: number; hasMore: boolean;
+  search?: string;
   sort: string; selectedBrands: string[]; brands: string[]; brandsOpen: boolean;
   selectedSizes: string[]; sizes: string[]; sizesOpen: boolean;
   pageSize: number; y: number;

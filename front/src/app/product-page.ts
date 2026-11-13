@@ -100,7 +100,7 @@ export class ProductPage {
     this.navigating.set(true);
     this.navigationError.set('');
     const offset = Math.floor(index / context.limit) * context.limit;
-    this.navigationRequest = this.api.page(context.category, context.sold, context.sort, context.limit, offset, context.brands, context.sizes).subscribe({
+    this.navigationRequest = this.api.page(context.category, context.sold, context.sort, context.limit, offset, context.brands, context.sizes, context.search).subscribe({
       next: page => {
         const product = page.items[index - offset];
         if (!product) {

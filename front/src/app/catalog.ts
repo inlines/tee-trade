@@ -31,7 +31,7 @@ export class CatalogService {
   private readonly http = inject(HttpClient);
   recordView(id:number) { this.http.post('/api/auth/product-views/'+id,{}).subscribe({error:()=>{}}); }
   list(category = '', sold = false) { return this.http.get<Product[]>('/api/products', { params: { ...(category ? {category} : {}), sold } }); }
-  page(category: string, sold: boolean, sort: string, limit: number, offset: number, brands: string[] = [], sizes: string[] = []) { return this.http.get<{items: Product[]; total: number; brands: string[]; sizes: string[]}>('/api/products/page', {params:{...(category ? {category} : {}), sold, sort, limit, offset, brands: JSON.stringify(brands), sizes: JSON.stringify(sizes)}}); }
+  page(category: string, sold: boolean, sort: string, limit: number, offset: number, brands: string[] = [], sizes: string[] = [], search = '') { return this.http.get<{items: Product[]; total: number; brands: string[]; sizes: string[]}>('/api/products/page', {params:{search,...(category ? {category} : {}), sold, sort, limit, offset, brands: JSON.stringify(brands), sizes: JSON.stringify(sizes)}}); }
   storefront() { return this.http.get<Storefront>('/api/storefront'); }
   product(id: string) { return this.http.get<Product>(`/api/products/${encodeURIComponent(id)}`); }
 }

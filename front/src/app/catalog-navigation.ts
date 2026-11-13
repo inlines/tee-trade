@@ -1,6 +1,7 @@
 import { categories } from './catalog';
 
 export interface CatalogNavigation {
+  search?: string;
   category: string;
   sold: boolean;
   sort: string;
@@ -25,6 +26,7 @@ export function parseCatalogNavigation(value: string | null): CatalogNavigation 
       || !Number.isSafeInteger(context.total) || context.total <= context.index) return null;
     if(context.sizes === undefined) context.sizes = [];
     if(!Array.isArray(context.sizes) || !context.sizes.every((size: unknown) => typeof size === 'string')) return null;
+    if(context.search !== undefined && (typeof context.search !== 'string' || context.search.length>160)) return null;
     return context;
   } catch {
     return null;
