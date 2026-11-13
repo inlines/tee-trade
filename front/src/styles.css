@@ -933,9 +933,7 @@ app-product-carousel {
 .carousel-stage {
   position:relative;
   width:100%;
-  height:auto;
-  aspect-ratio:3/2;
-  max-height:70svh;
+  height:min(52svh, 480px);
   overflow:hidden;
   touch-action:pan-y;
 }
@@ -998,7 +996,7 @@ app-product-carousel {
 .carousel-arrow.previous { left:4vw; }
 .carousel-arrow.next { right:4vw; }
 @media(max-width:700px) {
-  .carousel-stage { aspect-ratio:1; max-height:65svh; }
+  .carousel-stage { height:auto; aspect-ratio:1; max-height:65svh; }
   .carousel-photo { height:100%; }
   .carousel-arrow { width:38px; height:42px; top:50%; }
 }
